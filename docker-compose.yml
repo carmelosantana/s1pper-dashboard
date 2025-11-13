@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: s1pper-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-guestbook}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-guestbook}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-guestbook}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - s1pper-network
+
+  # Next.js Dashboard Application
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: s1pper-dashboard
+    restart: unless-stopped
+    environment:
+      # Printer Configuration
+      PRINTER_HOST: ${PRINTER_HOST:-192.168.1.123}
+      MOONRAKER_PORT: ${MOONRAKER_PORT:-7127}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      
+      # Database Configuration
+      DATABASE_URL: postgresql://${POSTGRES_USER:-guestbook}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-guestbook}
+      DATABASE_TIMEOUT: ${DATABASE_TIMEOUT:-2000}
+      DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-20}
+      
+      # Analytics (Optional)
+      UMAMI_WEBSITE_ID: ${UMAMI_WEBSITE_ID:-}
+      UMAMI_HOST_URL: ${UMAMI_HOST_URL:-}
+      
+      # Application Settings
+      NODE_ENV: ${NODE_ENV:-production}
+      NEXT_PUBLIC_VERCEL_URL: ${NEXT_PUBLIC_VERCEL_URL:-}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/printer/status', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    networks:
+      - s1pper-network
+    # Add extra_hosts to allow container to access printer on host network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  s1pper-network:
+    driver: bridge
