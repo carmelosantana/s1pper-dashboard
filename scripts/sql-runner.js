@@ -64,7 +64,170 @@ Available commands:
   .recent               - Show recent 10 entries
   .clear                - Clear all guestbook entries (DANGER!)
   .backup               - Backup guestbook entries to JSON file
-  .restore <file>       - Restore from JSON backup file
+  .restore <filename>   - Restore guestbook entries from JSON file
+`)
+}
+
+async function handleRestore(trimmed) {
+    if (trimmed.startsWith('.restore ')) {
+    const filename = trimmed.split(' ')[1]
+    if (!filename) {
+      console.log('❌ Please provide a filename')
+      return
+    }
+    
+    try {
+      const filePath = path.join(process.cwd(), filename)
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf8'))
+      
+      for (const entry of data.entries) {
+        await executeQuery(`
+          INSERT INTO guestbook_entries (name, email, message, printer_status, print_filename, print_progress, created_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+        `, [
+          entry.name, 
+          entry.email, 
+          entry.message, 
+          entry.printer_status || 'unknown', 
+          entry.print_filename || null, 
+          entry.print_progress || 0, 
+          entry.created_at
+        ])
+      }
+      
+      console.log(`✅ Restored ${data.entries.length} entries from ${filename}`)
+    } catch (error) {
+      console.error('❌ Error restoring data:', error.message)
+    }
+    return
+  }
+  
+  if (trimmed === '.settings') {
+    try {
+      const result = await executeQuery('SELECT * FROM dashboard_settings ORDER BY id DESC LIMIT 1')
+      if (result.rows && result.rows.length > 0) {
+        console.log('\n📊 Current Dashboard Settings:')
+        console.table(result.rows)
+      } else {
+        console.log('❌ No settings found')
+      }
+    } catch (error) {
+      console.error('❌ Error fetching settings:', error.message)
+    }
+    return
+  }
+  
+  if (trimmed === '.settings-update') {
+    console.log('📝 Update Dashboard Settings (press Enter to skip a field)')
+    rl.question('Visibility mode (offline/private/public): ', async (visibility) => {
+      rl.question('Video feed enabled (true/false): ', async (video) => {
+        rl.question('Dashboard title: ', async (title) => {
+          rl.question('Dashboard subtitle: ', async (subtitle) => {
+            rl.question('Config page enabled (true/false): ', async (config) => {
+              rl.question('Guestbook enabled (true/false): ', async (guestbook) => {
+                try {
+                  const updates = []
+                  const values = []
+                  let paramCount = 1
+                  
+                  if (visibility && ['offline', 'private', 'public'].includes(visibility)) {
+                    updates.push(`visibility_mode = $${paramCount}`)
+                    values.push(visibility)
+                    paramCount++
+                  }
+                  
+                  if (video && (video === 'true' || video === 'false')) {
+                    updates.push(`video_feed_enabled = $${paramCount}`)
+                    values.push(video === 'true')
+                    paramCount++
+                  }
+                  
+                  if (title) {
+                    updates.push(`dashboard_title = $${paramCount}`)
+                    values.push(title)
+                    paramCount++
+                  }
+                  
+                  if (subtitle) {
+                    updates.push(`dashboard_subtitle = $${paramCount}`)
+                    values.push(subtitle)
+                    paramCount++
+                  }
+                  
+                  if (config && (config === 'true' || config === 'false')) {
+                    updates.push(`config_page_enabled = $${paramCount}`)
+                    values.push(config === 'true')
+                    paramCount++
+                  }
+                  
+                  if (guestbook && (guestbook === 'true' || guestbook === 'false')) {
+                    updates.push(`guestbook_enabled = $${paramCount}`)
+                    values.push(guestbook === 'true')
+                    paramCount++
+                  }
+                  
+                  if (updates.length > 0) {
+                    updates.push('updated_at = CURRENT_TIMESTAMP')
+                    const query = `
+                      UPDATE dashboard_settings 
+                      SET ${updates.join(', ')}
+                      WHERE id = (SELECT id FROM dashboard_settings ORDER BY id DESC LIMIT 1)
+                      RETURNING *
+                    `
+                    const result = await executeQuery(query, values)
+                    console.log('✅ Settings updated successfully')
+                    console.table(result.rows)
+                  } else {
+                    console.log('⚠️  No changes made')
+                  }
+                } catch (error) {
+                  console.error('❌ Error updating settings:', error.message)
+                }
+                rl.prompt()
+              })
+            })
+          })
+        })
+      })
+    })
+    return
+  }
+  
+  if (trimmed === '.settings-reset') {
+    console.log('⚠️  This will reset all settings to defaults!')
+    rl.question('Are you sure? Type "yes" to confirm: ', async (answer) => {
+      if (answer.toLowerCase() === 'yes') {
+        try {
+          await executeQuery(`
+            UPDATE dashboard_settings
+            SET 
+              visibility_mode = 'public',
+              video_feed_enabled = true,
+              dashboard_title = 's1pper''s Dashboard',
+              dashboard_subtitle = 'A dashboard for s1pper, the Ender 3 S1 Pro',
+              dashboard_icon_url = NULL,
+              config_page_enabled = true,
+              guestbook_enabled = true,
+              streaming_music_file = NULL,
+              streaming_music_enabled = false,
+              streaming_music_loop = true,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = (SELECT id FROM dashboard_settings ORDER BY id DESC LIMIT 1)
+          `)
+          console.log('✅ Settings reset to defaults')
+        } catch (error) {
+          console.error('❌ Error resetting settings:', error.message)
+        }
+      } else {
+        console.log('❌ Reset cancelled')
+      }
+      rl.prompt()
+    })
+    return
+  }
+  .settings             - Show current dashboard settings
+  .settings-update      - Update dashboard settings (interactive)
+  .settings-reset       - Reset settings to defaults
   
 Raw SQL queries:
   Just type any SQL query and press Enter

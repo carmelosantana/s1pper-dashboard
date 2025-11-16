@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 import { Settings, Monitor } from 'lucide-react'
 import { trackEvent } from '@/components/umami-analytics'
 
@@ -54,6 +55,14 @@ export function SettingsControl({ className }: SettingsControlProps) {
       console.error('Failed to load settings:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const scrollToSettings = () => {
+    const settingsCard = document.getElementById('settings-card')
+    if (settingsCard) {
+      settingsCard.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      trackEvent('settings_scroll', { source: 'header_gear_icon' })
     }
   }
 
@@ -129,6 +138,17 @@ export function SettingsControl({ className }: SettingsControlProps) {
 
   return (
     <div className={`flex items-center gap-4 ${className}`}>
+      {/* Settings Scroll Button */}
+      <Button
+        onClick={scrollToSettings}
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2"
+        title="Scroll to Settings"
+      >
+        <Settings className="h-4 w-4" />
+      </Button>
+
       {/* View Selector */}
       <div className="flex items-center gap-2">
         <Monitor className="h-4 w-4 text-muted-foreground" />
@@ -136,20 +156,19 @@ export function SettingsControl({ className }: SettingsControlProps) {
           value={currentView}
           onValueChange={handleViewChange}
         >
-          <SelectTrigger className="w-28 h-7 text-xs">
+          <SelectTrigger className="w-36 h-7 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="default">Default</SelectItem>
-            <SelectItem value="stream">Stream</SelectItem>
-            <SelectItem value="vertical-stream">Vertical</SelectItem>
+            <SelectItem value="stream/horizontal">Horizontal Stream</SelectItem>
+            <SelectItem value="stream/vertical">Vertical Stream</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {/* Visibility Mode Selector */}
       <div className="flex items-center gap-2">
-        <Settings className="h-4 w-4 text-muted-foreground" />
         <Select
           value={settings.visibility_mode}
           onValueChange={handleVisibilityChange}
