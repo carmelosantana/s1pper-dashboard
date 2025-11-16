@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Activity } from "lucide-react"
 import PrinterDashboardClient from "./printer-dashboard-client"
 import type { PrinterStatus, TemperatureHistory, LifetimeStats } from "@/lib/types"
+import { isDatabaseConfigured, getDashboardSettings } from "@/lib/database"
 
 // Server-side function to fetch printer data
 async function fetchPrinterData(): Promise<{ status: PrinterStatus | null, temperatureHistory: TemperatureHistory | null, lifetimeStats: LifetimeStats | null }> {
@@ -89,6 +90,23 @@ function DashboardSkeleton() {
 
 export default async function PrinterDashboard() {
   const { status, temperatureHistory, lifetimeStats } = await fetchPrinterData()
+  const dbConfigured = isDatabaseConfigured()
+  
+  // Fetch dashboard settings
+  let dashboardTitle = "s1pper's Dashboard"
+  let dashboardSubtitle = "A dashboard for s1pper, the Ender 3 S1 Pro"
+  
+  if (dbConfigured) {
+    try {
+      const settings = await getDashboardSettings()
+      if (settings) {
+        dashboardTitle = settings.dashboard_title
+        dashboardSubtitle = settings.dashboard_subtitle
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard settings:', error)
+    }
+  }
 
   return (
     <Suspense fallback={<DashboardSkeleton />}>
@@ -96,6 +114,9 @@ export default async function PrinterDashboard() {
         initialStatus={status} 
         initialTemperatureHistory={temperatureHistory}
         initialLifetimeStats={lifetimeStats}
+        isDatabaseConfigured={dbConfigured}
+        dashboardTitle={dashboardTitle}
+        dashboardSubtitle={dashboardSubtitle}
       />
     </Suspense>
   )

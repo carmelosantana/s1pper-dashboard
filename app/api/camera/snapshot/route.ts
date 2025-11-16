@@ -49,26 +49,68 @@ export async function GET() {
 
     const snapshotUrl = await getCameraSnapshotUrl();
 
-    const response = await fetch(snapshotUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-      },
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-    if (!response.ok) {
-      return NextResponse.json({ error: 'Failed to fetch camera snapshot' }, { status: response.status });
+    try {
+      const response = await fetch(snapshotUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.error(`Camera snapshot HTTP error: ${response.status}`);
+        return NextResponse.json({ error: 'Failed to fetch camera snapshot' }, { status: response.status });
+      }
+
+      const imageBuffer = await response.arrayBuffer();
+      
+      return new NextResponse(imageBuffer, {
+        headers: {
+          'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+        },
+      });
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      if (fetchError instanceof Error) {
+        if (fetchError.name === 'AbortError') {
+          console.error('Camera snapshot timeout');
+          return NextResponse.json({ error: 'Camera snapshot request timed out' }, { status: 504 });
+        }
+      }
+      throw fetchError;
     }
-
-    const imageBuffer = await response.arrayBuffer();
-    
-    return new NextResponse(imageBuffer, {
-      headers: {
-        'Content-Type': response.headers.get('Content-Type') || 'image/jpeg',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-      },
-    });
   } catch (error) {
     console.error('Camera snapshot error:', error);
+    
+    // Provide more specific error messages
+    if (error instanceof Error) {
+      if (error.message.includes('ECONNRESET') || error.message.includes('terminated')) {
+        return NextResponse.json(
+          { error: 'Camera connection was reset. The camera may be busy or unavailable.' }, 
+          { status: 503 }
+        );
+      }
+      if (error.message.includes('ECONNREFUSED')) {
+        return NextResponse.json(
+          { error: 'Cannot connect to camera. Please check camera configuration.' }, 
+          { status: 503 }
+        );
+      }
+      if (error.message.includes('ETIMEDOUT')) {
+        return NextResponse.json(
+          { error: 'Camera request timed out' }, 
+          { status: 504 }
+        );
+      }
+    }
+    
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
