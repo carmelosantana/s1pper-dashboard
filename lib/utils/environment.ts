@@ -29,17 +29,20 @@ export function getEnvironment(): string {
 
 /**
  * Get the base URL for the application
- * Uses NEXT_PUBLIC_APP_URL in development or Vercel URL in production
+ * Uses NEXT_PUBLIC_APP_URL or falls back to Vercel URL in production, localhost in development
  * @returns The base URL for API requests
  */
 export function getBaseUrl(): string {
+  // Check for explicit NEXT_PUBLIC_APP_URL first
   if (process.env.NEXT_PUBLIC_APP_URL) {
     return process.env.NEXT_PUBLIC_APP_URL
   }
   
-  if (isProduction() && process.env.VERCEL_URL) {
-    return `https://${process.env.VERCEL_URL}`
+  // In production, use Vercel URL if available, otherwise fallback to localhost:3000
+  if (isProduction()) {
+    return process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
   }
   
+  // Development default
   return 'http://localhost:3000'
 }
