@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { 
   Select, 
   SelectContent, 
@@ -10,7 +11,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { Settings } from 'lucide-react'
+import { Settings, Monitor } from 'lucide-react'
 import { trackEvent } from '@/components/umami-analytics'
 
 interface DashboardSettings {
@@ -24,9 +25,11 @@ interface SettingsControlProps {
 }
 
 export function SettingsControl({ className }: SettingsControlProps) {
+  const router = useRouter()
   const [settings, setSettings] = useState<DashboardSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [currentView, setCurrentView] = useState<string>('default')
 
   // Only show in development mode
   const isDevelopment = process.env.NODE_ENV === 'development'
@@ -104,6 +107,17 @@ export function SettingsControl({ className }: SettingsControlProps) {
     updateSettings({ video_feed_enabled })
   }
 
+  const handleViewChange = (view: string) => {
+    setCurrentView(view)
+    trackEvent('view_changed', { view })
+    
+    if (view === 'default') {
+      router.push('/')
+    } else {
+      router.push(`/view/${view}`)
+    }
+  }
+
   if (loading || !settings) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
@@ -115,6 +129,23 @@ export function SettingsControl({ className }: SettingsControlProps) {
 
   return (
     <div className={`flex items-center gap-4 ${className}`}>
+      {/* View Selector */}
+      <div className="flex items-center gap-2">
+        <Monitor className="h-4 w-4 text-muted-foreground" />
+        <Select
+          value={currentView}
+          onValueChange={handleViewChange}
+        >
+          <SelectTrigger className="w-28 h-7 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Default</SelectItem>
+            <SelectItem value="stream">Stream</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Visibility Mode Selector */}
       <div className="flex items-center gap-2">
         <Settings className="h-4 w-4 text-muted-foreground" />

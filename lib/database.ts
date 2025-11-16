@@ -2,6 +2,8 @@ import { Pool, PoolClient } from 'pg'
 
 let pool: Pool | null = null
 let databaseAvailable: boolean | null = null
+let initializationPromise: Promise<void> | null = null
+let isInitialized = false
 
 // Initialize the database connection pool
 function initializePool(): Pool | null {
@@ -81,45 +83,62 @@ export async function query<T = any>(text: string, params?: any[]): Promise<T[]>
 
 // Initialize database tables
 export async function initializeDatabase(): Promise<void> {
-  const createTableQuery = `
-    CREATE TABLE IF NOT EXISTS guestbook_entries (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(255) NOT NULL,
-      email VARCHAR(255) NOT NULL,
-      message TEXT NOT NULL,
-      printer_status VARCHAR(50) NOT NULL DEFAULT 'unknown',
-      print_filename VARCHAR(255),
-      print_progress INTEGER DEFAULT 0,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_guestbook_created_at ON guestbook_entries(created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_guestbook_printer_status ON guestbook_entries(printer_status);
-
-    CREATE TABLE IF NOT EXISTS dashboard_settings (
-      id SERIAL PRIMARY KEY,
-      visibility_mode VARCHAR(20) NOT NULL DEFAULT 'public' CHECK (visibility_mode IN ('offline', 'private', 'public')),
-      video_feed_enabled BOOLEAN NOT NULL DEFAULT true,
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-    );
-
-    -- Insert default settings if none exist
-    INSERT INTO dashboard_settings (visibility_mode, video_feed_enabled)
-    SELECT 'public', true
-    WHERE NOT EXISTS (SELECT 1 FROM dashboard_settings);
-
-    CREATE INDEX IF NOT EXISTS idx_dashboard_settings_visibility ON dashboard_settings(visibility_mode);
-  `
-
-  try {
-    await query(createTableQuery)
-    console.log('Database tables initialized successfully')
-  } catch (error) {
-    console.error('Error initializing database:', error)
-    throw error
+  // If already initialized, return immediately
+  if (isInitialized) {
+    return
   }
+
+  // If initialization is in progress, wait for it
+  if (initializationPromise) {
+    return initializationPromise
+  }
+
+  // Start initialization
+  initializationPromise = (async () => {
+    const createTableQuery = `
+      CREATE TABLE IF NOT EXISTS guestbook_entries (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        printer_status VARCHAR(50) NOT NULL DEFAULT 'unknown',
+        print_filename VARCHAR(255),
+        print_progress INTEGER DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_guestbook_created_at ON guestbook_entries(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_guestbook_printer_status ON guestbook_entries(printer_status);
+
+      CREATE TABLE IF NOT EXISTS dashboard_settings (
+        id SERIAL PRIMARY KEY,
+        visibility_mode VARCHAR(20) NOT NULL DEFAULT 'public' CHECK (visibility_mode IN ('offline', 'private', 'public')),
+        video_feed_enabled BOOLEAN NOT NULL DEFAULT true,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- Insert default settings if none exist
+      INSERT INTO dashboard_settings (visibility_mode, video_feed_enabled)
+      SELECT 'public', true
+      WHERE NOT EXISTS (SELECT 1 FROM dashboard_settings);
+
+      CREATE INDEX IF NOT EXISTS idx_dashboard_settings_visibility ON dashboard_settings(visibility_mode);
+    `
+
+    try {
+      await query(createTableQuery)
+      isInitialized = true
+      console.log('Database tables initialized successfully')
+    } catch (error) {
+      console.error('Error initializing database:', error)
+      initializationPromise = null // Allow retry on next call
+      throw error
+    }
+  })()
+
+  return initializationPromise
 }
 
 // Close the database pool (useful for graceful shutdown)
