@@ -16,70 +16,29 @@ import type { PrinterStatus, TemperatureHistory, LifetimeStats } from '@/lib/typ
 import { CameraComponent } from "@/components/camera-component"
 import { CircularProgress } from "@/components/ui/circular-progress"
 import { trackEvent } from "@/components/umami-analytics"
+import { formatTime, formatFilamentLength, formatLifetimeTime, formatFinishTime } from "@/lib/utils/formatting"
 
 import GuestbookCard from "@/components/guestbook-card"
+import SettingsCard from "@/components/settings-card"
 import { SettingsControl } from "@/components/settings-control"
 
 interface PrinterDashboardClientProps {
   initialStatus: PrinterStatus | null
   initialTemperatureHistory: TemperatureHistory | null
   initialLifetimeStats: LifetimeStats | null
+  isDatabaseConfigured?: boolean
+  dashboardTitle?: string
+  dashboardSubtitle?: string
 }
 
-function formatTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = Math.floor(seconds % 60)
-  
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${secs}s`
-  } else if (minutes > 0) {
-    return `${minutes}m ${secs}s`
-  } else {
-    return `${secs}s`
-  }
-}
-
-function formatFilamentLength(mm: number): string {
-  if (mm > 1000) {
-    return `${(mm / 1000).toFixed(2)} m`
-  }
-  return `${mm.toFixed(0)} mm`
-}
-
-function formatLifetimeTime(seconds: number): string {
-  const days = Math.floor(seconds / (24 * 3600))
-  const hours = Math.floor((seconds % (24 * 3600)) / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  
-  if (days > 0) {
-    return `${days}d ${hours}h ${minutes}m`
-  } else if (hours > 0) {
-    return `${hours}h ${minutes}m`
-  } else {
-    return `${minutes}m`
-  }
-}
-
-function formatFinishTime(estimatedTimeLeft: number): string {
-  const finishTime = new Date(Date.now() + estimatedTimeLeft * 1000)
-  const now = new Date()
-  const isNextDay = finishTime.getDate() !== now.getDate()
-  
-  const timeString = finishTime.toLocaleString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  })
-  
-  if (isNextDay) {
-    return `Tomorrow, ${timeString}`
-  } else {
-    return timeString
-  }
-}
-
-export default function PrinterDashboardClient({ initialStatus, initialTemperatureHistory, initialLifetimeStats }: PrinterDashboardClientProps) {
+export default function PrinterDashboardClient({ 
+  initialStatus, 
+  initialTemperatureHistory, 
+  initialLifetimeStats, 
+  isDatabaseConfigured = false,
+  dashboardTitle = "s1pper's Dashboard",
+  dashboardSubtitle = "A dashboard for s1pper, the Ender 3 S1 Pro"
+}: PrinterDashboardClientProps) {
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
   const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
   const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats | null>(initialLifetimeStats)
@@ -276,10 +235,10 @@ export default function PrinterDashboardClient({ initialStatus, initialTemperatu
                   colors={['#ff6b35', '#f7931e', '#ffcc02', '#37b24d']}
                   className="text-2xl md:text-3xl font-bold text-balance leading-tight"
                 >
-                  s1pper's Dashboard
+                  {dashboardTitle}
                 </AuroraText>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>Ender 3 S1 Pro</span>
+                  <span>{dashboardSubtitle}</span>
                   <span>•</span>
                   <a href="/" className="hover:text-foreground transition-colors">Home</a>
                   <span>•</span>
@@ -370,10 +329,10 @@ export default function PrinterDashboardClient({ initialStatus, initialTemperatu
                 colors={['#06b6d4', '#8b5cf6', '#ec4899', '#10b981']}
                 className="text-2xl md:text-3xl font-bold text-balance leading-tight"
               >
-                s1pper's Dashboard
+                {dashboardTitle}
               </AuroraText>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Ender 3 S1 Pro</span>
+                <span>{dashboardSubtitle}</span>
                 <span>•</span>
                 <a href="/" className="hover:text-foreground transition-colors">Home</a>
                 <span>•</span>
@@ -784,6 +743,11 @@ export default function PrinterDashboardClient({ initialStatus, initialTemperatu
 
             {/* Guestbook */}
             <GuestbookCard className="bg-zinc-950 border-zinc-800" />
+
+            {/* Settings - only show if database is configured */}
+            {isDatabaseConfigured && (
+              <SettingsCard />
+            )}
 
           </div>
         </div>
