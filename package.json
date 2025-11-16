@@ -8,6 +8,8 @@
     "lint": "eslint .",
     "start": "next start",
     "sync-configs": "./scripts/sync-configs.sh",
+    "db:reset": "./scripts/reset-database.sh",
+    "db:cli": "node scripts/sql-runner.js",
     "docker:build": "docker-compose build --no-cache",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",

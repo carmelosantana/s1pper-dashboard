@@ -24,6 +24,8 @@ export default async function VerticalStreamPage() {
   const musicVolume = dashboardSettings?.streaming_music_volume ?? 50
   const musicPlaylist = dashboardSettings?.streaming_music_playlist ?? []
   const musicLoop = dashboardSettings?.streaming_music_loop ?? false
+  const musicCrossfadeEnabled = dashboardSettings?.streaming_music_crossfade_enabled ?? false
+  const musicCrossfadeDuration = dashboardSettings?.streaming_music_crossfade_duration ?? 3.0
 
   return (
     <Suspense fallback={<ViewSkeleton />}>
@@ -34,6 +36,8 @@ export default async function VerticalStreamPage() {
         musicVolume={musicVolume}
         musicPlaylist={musicPlaylist}
         musicLoop={musicLoop}
+        musicCrossfadeEnabled={musicCrossfadeEnabled}
+        musicCrossfadeDuration={musicCrossfadeDuration}
       />
     </Suspense>
   )

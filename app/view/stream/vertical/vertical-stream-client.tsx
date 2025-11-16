@@ -14,6 +14,8 @@ interface VerticalStreamClientProps {
   musicVolume: number
   musicPlaylist: string[]
   musicLoop: boolean
+  musicCrossfadeEnabled: boolean
+  musicCrossfadeDuration: number
 }
 
 function formatTime(seconds: number): string {
@@ -54,7 +56,9 @@ export default function VerticalStreamClient({
   musicEnabled,
   musicVolume,
   musicPlaylist,
-  musicLoop
+  musicLoop,
+  musicCrossfadeEnabled,
+  musicCrossfadeDuration
 }: VerticalStreamClientProps) {
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
   const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
@@ -284,6 +288,8 @@ export default function VerticalStreamClient({
         volume={musicVolume}
         playlist={musicPlaylist}
         loop={musicLoop}
+        crossfadeEnabled={musicCrossfadeEnabled}
+        crossfadeDuration={musicCrossfadeDuration}
       />
       
       {/* Full screen video feed - Portrait aspect ratio */}

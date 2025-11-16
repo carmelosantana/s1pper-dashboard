@@ -14,6 +14,8 @@ interface StreamViewClientProps {
   musicVolume: number
   musicPlaylist: string[]
   musicLoop: boolean
+  musicCrossfadeEnabled: boolean
+  musicCrossfadeDuration: number
 }
 
 function formatTime(seconds: number): string {
@@ -54,7 +56,9 @@ export default function StreamViewClient({
   musicEnabled,
   musicVolume,
   musicPlaylist,
-  musicLoop
+  musicLoop,
+  musicCrossfadeEnabled,
+  musicCrossfadeDuration
 }: StreamViewClientProps) {
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
   const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
@@ -133,6 +137,8 @@ export default function StreamViewClient({
         volume={musicVolume}
         playlist={musicPlaylist}
         loop={musicLoop}
+        crossfadeEnabled={musicCrossfadeEnabled}
+        crossfadeDuration={musicCrossfadeDuration}
       />
       
       {/* Full screen video feed */}

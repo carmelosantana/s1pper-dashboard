@@ -137,85 +137,11 @@ export async function initializeDatabase(): Promise<void> {
         streaming_music_loop BOOLEAN NOT NULL DEFAULT true,
         streaming_music_volume INTEGER NOT NULL DEFAULT 50 CHECK (streaming_music_volume >= 0 AND streaming_music_volume <= 100),
         streaming_music_playlist TEXT[] DEFAULT '{}',
+        streaming_music_crossfade_enabled BOOLEAN NOT NULL DEFAULT false,
+        streaming_music_crossfade_duration NUMERIC(3,1) NOT NULL DEFAULT 3.0 CHECK (streaming_music_crossfade_duration >= 0 AND streaming_music_crossfade_duration <= 10),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
-
-      -- Add new columns if they don't exist (for existing databases)
-      DO $$
-      BEGIN
-        -- Add dashboard_title
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'dashboard_settings' AND column_name = 'dashboard_title'
-        ) THEN
-          ALTER TABLE dashboard_settings ADD COLUMN dashboard_title TEXT NOT NULL DEFAULT 's1pper''s Dashboard';
-        END IF;
-        
-        -- Add dashboard_subtitle
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'dashboard_settings' AND column_name = 'dashboard_subtitle'
-        ) THEN
-          ALTER TABLE dashboard_settings ADD COLUMN dashboard_subtitle TEXT NOT NULL DEFAULT 'A dashboard for s1pper, the Ender 3 S1 Pro';
-        END IF;
-        
-        -- Add dashboard_icon_url
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'dashboard_settings' AND column_name = 'dashboard_icon_url'
-        ) THEN
-          ALTER TABLE dashboard_settings ADD COLUMN dashboard_icon_url TEXT;
-        END IF;
-        
-        -- Add config_page_enabled
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'dashboard_settings' AND column_name = 'config_page_enabled'
-        ) THEN
-          ALTER TABLE dashboard_settings ADD COLUMN config_page_enabled BOOLEAN NOT NULL DEFAULT true;
-        END IF;
-        
-        -- Add guestbook_enabled
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'dashboard_settings' AND column_name = 'guestbook_enabled'
-        ) THEN
-          ALTER TABLE dashboard_settings ADD COLUMN guestbook_enabled BOOLEAN NOT NULL DEFAULT true;
-        END IF;
-        
-        -- Add streaming_music_enabled
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'dashboard_settings' AND column_name = 'streaming_music_enabled'
-        ) THEN
-          ALTER TABLE dashboard_settings ADD COLUMN streaming_music_enabled BOOLEAN NOT NULL DEFAULT false;
-        END IF;
-        
-        -- Add streaming_music_loop
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'dashboard_settings' AND column_name = 'streaming_music_loop'
-        ) THEN
-          ALTER TABLE dashboard_settings ADD COLUMN streaming_music_loop BOOLEAN NOT NULL DEFAULT true;
-        END IF;
-        
-        -- Add streaming_music_playlist
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'dashboard_settings' AND column_name = 'streaming_music_playlist'
-        ) THEN
-          ALTER TABLE dashboard_settings ADD COLUMN streaming_music_playlist TEXT[] DEFAULT '{}';
-        END IF;
-        
-        -- Add streaming_music_volume
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'dashboard_settings' AND column_name = 'streaming_music_volume'
-        ) THEN
-          ALTER TABLE dashboard_settings ADD COLUMN streaming_music_volume INTEGER NOT NULL DEFAULT 50 CHECK (streaming_music_volume >= 0 AND streaming_music_volume <= 100);
-        END IF;
-      END $$;
 
       -- Insert default settings if none exist
       INSERT INTO dashboard_settings (
@@ -287,6 +213,8 @@ export interface DashboardSettings {
   streaming_music_loop: boolean
   streaming_music_volume: number
   streaming_music_playlist: string[]
+  streaming_music_crossfade_enabled: boolean
+  streaming_music_crossfade_duration: number
   created_at: string
   updated_at: string
 }
@@ -309,6 +237,8 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       streaming_music_loop: true,
       streaming_music_volume: 50,
       streaming_music_playlist: [],
+      streaming_music_crossfade_enabled: false,
+      streaming_music_crossfade_duration: 3.0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -316,7 +246,14 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
 
   try {
     const results = await query<DashboardSettings>('SELECT * FROM dashboard_settings ORDER BY id DESC LIMIT 1')
-    return results[0] || null
+    if (results[0]) {
+      // Convert NUMERIC fields from string to number
+      return {
+        ...results[0],
+        streaming_music_crossfade_duration: parseFloat(results[0].streaming_music_crossfade_duration as any) || 3.0
+      }
+    }
+    return null
   } catch (error) {
     console.error('Error fetching dashboard settings:', error)
     // Return default settings on error
@@ -334,6 +271,8 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       streaming_music_loop: true,
       streaming_music_volume: 50,
       streaming_music_playlist: [],
+      streaming_music_crossfade_enabled: false,
+      streaming_music_crossfade_duration: 3.0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -353,7 +292,9 @@ export async function updateDashboardSettings(
   streaming_music_enabled?: boolean,
   streaming_music_loop?: boolean,
   streaming_music_playlist?: string[],
-  streaming_music_volume?: number
+  streaming_music_volume?: number,
+  streaming_music_crossfade_enabled?: boolean,
+  streaming_music_crossfade_duration?: number
 ): Promise<DashboardSettings | null> {
   if (!isDatabaseAvailable()) {
     console.warn('Cannot update dashboard settings: database not available')
@@ -435,6 +376,18 @@ export async function updateDashboardSettings(
     if (streaming_music_volume !== undefined) {
       updateFields.push(`streaming_music_volume = $${paramCount}`)
       values.push(streaming_music_volume)
+      paramCount++
+    }
+
+    if (streaming_music_crossfade_enabled !== undefined) {
+      updateFields.push(`streaming_music_crossfade_enabled = $${paramCount}`)
+      values.push(streaming_music_crossfade_enabled)
+      paramCount++
+    }
+
+    if (streaming_music_crossfade_duration !== undefined) {
+      updateFields.push(`streaming_music_crossfade_duration = $${paramCount}`)
+      values.push(streaming_music_crossfade_duration)
       paramCount++
     }
 

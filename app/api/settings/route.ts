@@ -99,6 +99,8 @@ export async function GET(request: NextRequest) {
       streaming_music_loop: settings.streaming_music_loop,
       streaming_music_playlist: settings.streaming_music_playlist || [],
       streaming_music_volume: settings.streaming_music_volume || 50,
+      streaming_music_crossfade_enabled: settings.streaming_music_crossfade_enabled || false,
+      streaming_music_crossfade_duration: settings.streaming_music_crossfade_duration || 3.0,
       updated_at: settings.updated_at
     })
   } catch (error) {
@@ -154,7 +156,9 @@ export async function PUT(request: NextRequest) {
       streaming_music_enabled,
       streaming_music_loop,
       streaming_music_playlist,
-      streaming_music_volume
+      streaming_music_volume,
+      streaming_music_crossfade_enabled,
+      streaming_music_crossfade_duration
     } = body
 
     // Validate input
@@ -214,6 +218,25 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    if (streaming_music_crossfade_enabled !== undefined && typeof streaming_music_crossfade_enabled !== 'boolean') {
+      return NextResponse.json(
+        { error: 'Invalid streaming_music_crossfade_enabled. Must be a boolean' },
+        { status: 400 }
+      )
+    }
+
+    if (streaming_music_crossfade_duration !== undefined) {
+      const duration = Number(streaming_music_crossfade_duration)
+      if (isNaN(duration) || duration < 0 || duration > 10) {
+        return NextResponse.json(
+          { error: 'Invalid streaming_music_crossfade_duration. Must be a number between 0 and 10' },
+          { status: 400 }
+        )
+      }
+      // Round to 1 decimal place to match database precision
+      body.streaming_music_crossfade_duration = Math.round(duration * 10) / 10
+    }
+
     // Update settings
     const updatedSettings = await updateDashboardSettings(
       visibility_mode,
@@ -227,7 +250,9 @@ export async function PUT(request: NextRequest) {
       streaming_music_enabled,
       streaming_music_loop,
       streaming_music_playlist,
-      streaming_music_volume
+      streaming_music_volume,
+      streaming_music_crossfade_enabled,
+      streaming_music_crossfade_duration
     )
     
     if (!updatedSettings) {
@@ -250,6 +275,8 @@ export async function PUT(request: NextRequest) {
       streaming_music_loop: updatedSettings.streaming_music_loop,
       streaming_music_playlist: updatedSettings.streaming_music_playlist || [],
       streaming_music_volume: updatedSettings.streaming_music_volume || 50,
+      streaming_music_crossfade_enabled: updatedSettings.streaming_music_crossfade_enabled || false,
+      streaming_music_crossfade_duration: updatedSettings.streaming_music_crossfade_duration || 3.0,
       updated_at: updatedSettings.updated_at
     })
 
