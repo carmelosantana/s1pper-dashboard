@@ -142,6 +142,7 @@ export function SettingsControl({ className }: SettingsControlProps) {
           <SelectContent>
             <SelectItem value="default">Default</SelectItem>
             <SelectItem value="stream">Stream</SelectItem>
+            <SelectItem value="vertical-stream">Vertical</SelectItem>
           </SelectContent>
         </Select>
       </div>
