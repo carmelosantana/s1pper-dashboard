@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import { notFound } from "next/navigation"
 import StreamViewClient from "./stream-view-client"
+import VerticalStreamClient from "./vertical-stream-client"
 import type { PrinterStatus, TemperatureHistory } from "@/lib/types"
 
 // Server-side function to fetch printer data
@@ -50,8 +51,8 @@ interface PageProps {
 export default async function ViewPage({ params }: PageProps) {
   const { theme } = await params
   
-  // Only support 'stream' theme for now
-  if (theme !== 'stream') {
+  // Only support 'stream' and 'vertical-stream' themes for now
+  if (theme !== 'stream' && theme !== 'vertical-stream') {
     notFound()
   }
 
@@ -59,10 +60,17 @@ export default async function ViewPage({ params }: PageProps) {
 
   return (
     <Suspense fallback={<ViewSkeleton />}>
-      <StreamViewClient 
-        initialStatus={status} 
-        initialTemperatureHistory={temperatureHistory}
-      />
+      {theme === 'stream' ? (
+        <StreamViewClient 
+          initialStatus={status} 
+          initialTemperatureHistory={temperatureHistory}
+        />
+      ) : (
+        <VerticalStreamClient 
+          initialStatus={status} 
+          initialTemperatureHistory={temperatureHistory}
+        />
+      )}
     </Suspense>
   )
 }
