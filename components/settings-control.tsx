@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { 
   Select, 
   SelectContent, 
@@ -10,7 +11,8 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
-import { Settings } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Settings, Monitor } from 'lucide-react'
 import { trackEvent } from '@/components/umami-analytics'
 
 interface DashboardSettings {
@@ -24,9 +26,11 @@ interface SettingsControlProps {
 }
 
 export function SettingsControl({ className }: SettingsControlProps) {
+  const router = useRouter()
   const [settings, setSettings] = useState<DashboardSettings | null>(null)
   const [loading, setLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [currentView, setCurrentView] = useState<string>('default')
 
   // Only show in development mode
   const isDevelopment = process.env.NODE_ENV === 'development'
@@ -51,6 +55,14 @@ export function SettingsControl({ className }: SettingsControlProps) {
       console.error('Failed to load settings:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const scrollToSettings = () => {
+    const settingsCard = document.getElementById('settings-card')
+    if (settingsCard) {
+      settingsCard.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      trackEvent('settings_scroll', { source: 'header_gear_icon' })
     }
   }
 
@@ -104,6 +116,17 @@ export function SettingsControl({ className }: SettingsControlProps) {
     updateSettings({ video_feed_enabled })
   }
 
+  const handleViewChange = (view: string) => {
+    setCurrentView(view)
+    trackEvent('view_changed', { view })
+    
+    if (view === 'default') {
+      router.push('/')
+    } else {
+      router.push(`/view/${view}`)
+    }
+  }
+
   if (loading || !settings) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
@@ -115,9 +138,37 @@ export function SettingsControl({ className }: SettingsControlProps) {
 
   return (
     <div className={`flex items-center gap-4 ${className}`}>
+      {/* Settings Scroll Button */}
+      <Button
+        onClick={scrollToSettings}
+        variant="ghost"
+        size="sm"
+        className="h-7 px-2"
+        title="Scroll to Settings"
+      >
+        <Settings className="h-4 w-4" />
+      </Button>
+
+      {/* View Selector */}
+      <div className="flex items-center gap-2">
+        <Monitor className="h-4 w-4 text-muted-foreground" />
+        <Select
+          value={currentView}
+          onValueChange={handleViewChange}
+        >
+          <SelectTrigger className="w-36 h-7 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">Default</SelectItem>
+            <SelectItem value="stream/horizontal">Horizontal Stream</SelectItem>
+            <SelectItem value="stream/vertical">Vertical Stream</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Visibility Mode Selector */}
       <div className="flex items-center gap-2">
-        <Settings className="h-4 w-4 text-muted-foreground" />
         <Select
           value={settings.visibility_mode}
           onValueChange={handleVisibilityChange}

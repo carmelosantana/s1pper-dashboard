@@ -44,7 +44,10 @@ export default function UmamiAnalytics({ websiteId, hostUrl }: UmamiAnalyticsPro
           console.log('Umami analytics loaded successfully')
         }}
         onError={(e) => {
-          console.error('Failed to load Umami analytics:', e)
+          // Silently handle Umami loading errors (network issues, blockers, etc.)
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Umami analytics failed to load (this is normal in development)')
+          }
         }}
       />
     </>

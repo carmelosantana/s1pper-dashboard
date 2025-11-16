@@ -10,6 +10,7 @@ A fun, real-time dashboard for monitoring your Klipper/Moonraker 3D printer. Fea
 - **Camera Feed**: Live streaming and snapshot capture with privacy controls
 - **Temperature Monitoring**: Real-time temperature charts for extruder and bed
 - **Lifetime Statistics**: Track total print time, filament usage, and completed prints
+- **Multiple View Modes**: Default dashboard, horizontal stream, and vertical stream layouts
 - **Visitor Guestbook**: Optional database-powered guestbook for visitors (PostgreSQL)
 - **Responsive Design**: Works on desktop, tablet, and mobile devices
 - **Graceful Degradation**: App works even when database features are unavailable
@@ -286,6 +287,80 @@ The application is designed to work even when components are unavailable:
 - **No Database**: Guestbook features are hidden, settings default to public mode
 - **Printer Offline**: Shows offline status with last known information
 - **Camera Unavailable**: Shows placeholder with error message
+
+## Dashboard Views
+
+The dashboard supports multiple view modes optimized for different use cases.
+
+### Available Views
+
+#### Default View
+- **Route:** `/` (root)
+- **Description:** Standard dashboard with full feature cards layout
+- **Features:**
+  - Complete printer status information
+  - Temperature charts and history
+  - Camera feed with controls
+  - File information and progress
+  - Lifetime statistics
+  - Guestbook (when database is available)
+  - Settings panel (development mode)
+
+#### Horizontal Stream View
+- **Route:** `/view/stream/horizontal`
+- **Description:** Optimized for streaming to TV, Twitch, or YouTube
+- **Resolution:** 1920x1080 (landscape)
+- **Layout:**
+  - Full-screen video feed background
+  - Minimalist overlay design with gradients for readability
+  - **Top Left:** Printer status badge and current time
+  - **Bottom Left:** File name, progress bar, and time information
+  - **Top Right:** Temperature stats (extruder and bed) with power indicators
+- **Updates:** Real-time updates every 3 seconds
+
+#### Vertical Stream View
+- **Route:** `/view/stream/vertical`
+- **Description:** Optimized for mobile streaming and portrait displays
+- **Resolution:** 1080x1920 (portrait)
+- **Layout:**
+  - Full-screen portrait video feed
+  - Rotating information cards (changes every 5 seconds)
+  - Card rotation: Temperatures, Speed, Filament, and Layers
+  - **Top:** Printer status and current time
+  - **Middle:** Rotating info card with smooth transitions
+  - **Bottom:** File name and progress information
+- **Updates:** Real-time updates every 3 seconds
+
+### View Selector (Development Mode)
+
+When running in development mode (`NODE_ENV=development`), a view selector dropdown appears in the header:
+
+1. Look for the Monitor icon (📺) in the header next to settings
+2. Select between "Default", "Horizontal Stream", or "Vertical Stream"
+3. View changes are tracked via analytics (when enabled)
+
+**Direct Access:**
+- Default: `http://localhost:3000/`
+- Horizontal Stream: `http://localhost:3000/view/stream/horizontal`
+- Vertical Stream: `http://localhost:3000/view/stream/vertical`
+
+### Privacy & View Settings
+
+All views respect dashboard visibility settings:
+- **Offline mode:** Shows offline message
+- **Private mode:** Redacts filenames and disables video
+- **Public mode:** Shows all information
+
+### Technical Implementation
+
+- **Server-Side Rendering:** Initial data fetched on server via Next.js App Router
+- **Client Updates:** Real-time updates via client components
+- **Data Security:** No sensitive information exposed to client
+- **Camera Updates:**
+  - Continuous stream when printing
+  - Background snapshots every 30 seconds when idle
+- **Routing:** Dynamic routes via `/view/[theme]/page.tsx`
+- **Error Handling:** Invalid themes return 404
 
 ## API Endpoints
 
