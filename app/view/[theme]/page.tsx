@@ -3,13 +3,12 @@ import { notFound } from "next/navigation"
 import StreamViewClient from "./stream-view-client"
 import VerticalStreamClient from "./vertical-stream-client"
 import type { PrinterStatus, TemperatureHistory } from "@/lib/types"
+import { getBaseUrl } from "@/lib/utils/environment"
 
 // Server-side function to fetch printer data
 async function fetchPrinterData(): Promise<{ status: PrinterStatus | null, temperatureHistory: TemperatureHistory | null }> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' 
-      ? `https://${process.env.VERCEL_URL || 'localhost:3000'}` 
-      : 'http://localhost:3000')
+    const baseUrl = getBaseUrl()
     
     const [statusResponse, tempResponse] = await Promise.all([
       fetch(`${baseUrl}/api/printer/status`, { 

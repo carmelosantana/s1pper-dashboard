@@ -4,13 +4,12 @@ import { Activity } from "lucide-react"
 import PrinterDashboardClient from "./printer-dashboard-client"
 import type { PrinterStatus, TemperatureHistory, LifetimeStats } from "@/lib/types"
 import { isDatabaseConfigured, getDashboardSettings } from "@/lib/database"
+import { getBaseUrl } from "@/lib/utils/environment"
 
 // Server-side function to fetch printer data
 async function fetchPrinterData(): Promise<{ status: PrinterStatus | null, temperatureHistory: TemperatureHistory | null, lifetimeStats: LifetimeStats | null }> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' 
-      ? `https://${process.env.VERCEL_URL || 'localhost:3000'}` // Use Vercel URL if available in production
-      : 'http://localhost:3000')
+    const baseUrl = getBaseUrl()
     
     const [statusResponse, tempResponse, lifetimeResponse] = await Promise.all([
       fetch(`${baseUrl}/api/printer/status`, { 
