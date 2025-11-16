@@ -18,12 +18,16 @@ import { CircularProgress } from "@/components/ui/circular-progress"
 import { trackEvent } from "@/components/umami-analytics"
 
 import GuestbookCard from "@/components/guestbook-card"
+import SettingsCard from "@/components/settings-card"
 import { SettingsControl } from "@/components/settings-control"
 
 interface PrinterDashboardClientProps {
   initialStatus: PrinterStatus | null
   initialTemperatureHistory: TemperatureHistory | null
   initialLifetimeStats: LifetimeStats | null
+  isDatabaseConfigured?: boolean
+  dashboardTitle?: string
+  dashboardSubtitle?: string
 }
 
 function formatTime(seconds: number): string {
@@ -79,7 +83,14 @@ function formatFinishTime(estimatedTimeLeft: number): string {
   }
 }
 
-export default function PrinterDashboardClient({ initialStatus, initialTemperatureHistory, initialLifetimeStats }: PrinterDashboardClientProps) {
+export default function PrinterDashboardClient({ 
+  initialStatus, 
+  initialTemperatureHistory, 
+  initialLifetimeStats, 
+  isDatabaseConfigured = false,
+  dashboardTitle = "s1pper's Dashboard",
+  dashboardSubtitle = "A dashboard for s1pper, the Ender 3 S1 Pro"
+}: PrinterDashboardClientProps) {
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
   const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
   const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats | null>(initialLifetimeStats)
@@ -276,10 +287,10 @@ export default function PrinterDashboardClient({ initialStatus, initialTemperatu
                   colors={['#ff6b35', '#f7931e', '#ffcc02', '#37b24d']}
                   className="text-2xl md:text-3xl font-bold text-balance leading-tight"
                 >
-                  s1pper's Dashboard
+                  {dashboardTitle}
                 </AuroraText>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>Ender 3 S1 Pro</span>
+                  <span>{dashboardSubtitle}</span>
                   <span>•</span>
                   <a href="/" className="hover:text-foreground transition-colors">Home</a>
                   <span>•</span>
@@ -370,10 +381,10 @@ export default function PrinterDashboardClient({ initialStatus, initialTemperatu
                 colors={['#06b6d4', '#8b5cf6', '#ec4899', '#10b981']}
                 className="text-2xl md:text-3xl font-bold text-balance leading-tight"
               >
-                s1pper's Dashboard
+                {dashboardTitle}
               </AuroraText>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Ender 3 S1 Pro</span>
+                <span>{dashboardSubtitle}</span>
                 <span>•</span>
                 <a href="/" className="hover:text-foreground transition-colors">Home</a>
                 <span>•</span>
@@ -784,6 +795,11 @@ export default function PrinterDashboardClient({ initialStatus, initialTemperatu
 
             {/* Guestbook */}
             <GuestbookCard className="bg-zinc-950 border-zinc-800" />
+
+            {/* Settings - only show if database is configured */}
+            {isDatabaseConfigured && (
+              <SettingsCard />
+            )}
 
           </div>
         </div>
