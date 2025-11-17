@@ -359,8 +359,7 @@ All views respect dashboard visibility settings:
 - **Camera Updates:**
   - Continuous stream when printing
   - Background snapshots every 30 seconds when idle
-- **Routing:** Dynamic routes via `/view/[theme]/page.tsx`
-- **Error Handling:** Invalid themes return 404
+- **Routing:** Stream views via `/view/stream/horizontal` and `/view/stream/vertical`
 
 ## API Endpoints
 
