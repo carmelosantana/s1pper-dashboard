@@ -25,6 +25,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Slider } from '@/components/ui/slider'
 import { isDevelopment } from '@/lib/utils/environment'
 import { toast } from 'sonner'
+import { trackEvent } from '@/components/umami-analytics'
 
 interface DashboardSettings {
   visibility_mode: 'offline' | 'private' | 'public'
@@ -188,6 +189,14 @@ export default function SettingsCard() {
         setOriginalSettings(settingsWithPlaylist)
         setHasUnsavedChanges(false)
         toast.success('Settings saved successfully')
+        
+        // Track settings save event
+        trackEvent('settings_saved', {
+          video_feed_enabled: settings.video_feed_enabled,
+          visibility_mode: settings.visibility_mode,
+          guestbook_enabled: settings.guestbook_enabled,
+          streaming_music_enabled: settings.streaming_music_enabled
+        })
       } else {
         toast.error('Failed to save settings')
       }

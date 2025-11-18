@@ -87,20 +87,25 @@ export async function GET(request: NextRequest) {
     const response = await fetch(streamUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0',
+        'Accept': 'multipart/x-mixed-replace,image/jpeg',
       },
+      // @ts-ignore - Next.js types don't include duplex
+      duplex: 'half',
     });
 
     if (!response.ok) {
       return NextResponse.json({ error: 'Failed to fetch camera stream' }, { status: response.status });
     }
 
-    return new NextResponse(response.body, {
-      headers: {
-        'Content-Type': response.headers.get('Content-Type') || 'multipart/x-mixed-replace',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Connection': 'keep-alive',
-      },
-    });
+    const headers = new Headers();
+    headers.set('Content-Type', response.headers.get('Content-Type') || 'multipart/x-mixed-replace; boundary=frame');
+    headers.set('Cache-Control', 'no-cache, no-store, must-revalidate, private');
+    headers.set('Pragma', 'no-cache');
+    headers.set('Expires', '0');
+    headers.set('Connection', 'keep-alive');
+    headers.set('X-Accel-Buffering', 'no');
+    
+    return new NextResponse(response.body, { headers });
   } catch (error) {
     console.error('Camera stream error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

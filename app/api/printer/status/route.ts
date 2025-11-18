@@ -10,8 +10,6 @@ if (!KLIPPER_HOST) {
 }
 
 const KLIPPER_BASE_URL = KLIPPER_HOST ? `http://${KLIPPER_HOST}:${KLIPPER_PORT}` : null
-
-// Cache for 2 seconds to avoid overwhelming the printer
 const CACHE_DURATION = 2000
 let lastFetch = 0
 let cachedData: PrinterStatus | null = null

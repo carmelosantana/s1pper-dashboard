@@ -68,7 +68,6 @@ export default function StreamViewClient({
 }: StreamViewClientProps) {
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
   const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
-  const [streamUrl, setStreamUrl] = useState<string>('/api/camera/stream')
   const [currentTime, setCurrentTime] = useState<Date>(new Date())
 
   // Update current time every second
@@ -97,9 +96,6 @@ export default function StreamViewClient({
           const tempHistory = await tempResponse.json()
           setTemperatureHistory(tempHistory)
         }
-
-        // Add cache busting to video stream
-        setStreamUrl(`/api/camera/stream?t=${Date.now()}`)
       } catch (error) {
         console.error('Error fetching printer data:', error)
       }
@@ -148,12 +144,21 @@ export default function StreamViewClient({
       />
       
       {/* Full screen video feed */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0 bg-black">
         <img
-          src={streamUrl}
+          src="/api/camera/stream"
           alt="Printer Camera Stream"
           className="w-full h-full object-cover"
-          style={{ imageRendering: 'crisp-edges' }}
+          style={{ 
+            imageRendering: 'auto',
+            willChange: 'transform',
+          }}
+          onError={(e) => {
+            console.error('Stream error:', e)
+          }}
+          onLoad={() => {
+            console.log('Stream loaded successfully')
+          }}
         />
       </div>
 

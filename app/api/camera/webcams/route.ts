@@ -47,7 +47,6 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Sync camera settings with database (upsert all cameras from Moonraker)
     try {
       const cameraNames = data.result.webcams.map(w => ({ uid: w.uid, name: w.name }));
       await upsertCameraSettings(cameraNames);

@@ -1,22 +1,10 @@
-/**
- * API utility functions
- * Centralized functions for making API requests with consistent patterns
- */
-
 import { getBaseUrl } from './environment'
 
-/**
- * Fetch options with no caching for real-time data
- */
 export const NO_CACHE_OPTIONS: RequestInit = {
   cache: 'no-store',
   next: { revalidate: 0 }
 }
 
-/**
- * Fetch printer status from the API
- * @returns PrinterStatus object or null if fetch fails
- */
 export async function fetchPrinterStatus() {
   try {
     const baseUrl = getBaseUrl()
@@ -34,10 +22,6 @@ export async function fetchPrinterStatus() {
   }
 }
 
-/**
- * Fetch temperature history from the API
- * @returns TemperatureHistory object or null if fetch fails
- */
 export async function fetchTemperatureHistory() {
   try {
     const baseUrl = getBaseUrl()
@@ -55,10 +39,6 @@ export async function fetchTemperatureHistory() {
   }
 }
 
-/**
- * Fetch lifetime statistics from the API
- * @returns LifetimeStats object or null if fetch fails
- */
 export async function fetchLifetimeStats() {
   try {
     const baseUrl = getBaseUrl()
@@ -76,10 +56,6 @@ export async function fetchLifetimeStats() {
   }
 }
 
-/**
- * Fetch dashboard settings from the API
- * @returns Dashboard settings or null if fetch fails
- */
 export async function fetchDashboardSettings() {
   try {
     const baseUrl = getBaseUrl()
@@ -97,12 +73,6 @@ export async function fetchDashboardSettings() {
   }
 }
 
-/**
- * Generic fetch helper with error handling
- * @param endpoint - API endpoint to fetch from
- * @param options - Fetch options
- * @returns Response JSON or null if fetch fails
- */
 export async function apiFetch<T = any>(endpoint: string, options?: RequestInit): Promise<T | null> {
   try {
     const baseUrl = getBaseUrl()

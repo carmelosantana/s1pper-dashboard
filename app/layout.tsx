@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 
-import { Analytics } from '@vercel/analytics/next'
 import UmamiAnalytics from '@/components/umami-analytics'
 import './globals.css'
 import { Roboto, Roboto_Mono } from 'next/font/google'
@@ -55,7 +54,6 @@ export default function RootLayout({
     <html lang="en" className={`dark ${roboto.variable} ${robotoMono.variable}`}>
       <body className={`${roboto.className} antialiased`}>
         {children}
-        <Analytics />
         <UmamiAnalytics 
           websiteId={process.env.UMAMI_WEBSITE_ID}
           hostUrl={process.env.UMAMI_HOST_URL}

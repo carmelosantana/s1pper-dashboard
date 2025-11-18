@@ -5,30 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Confetti, type ConfettiRef } from '@/components/ui/confetti';
-import { trackEvent } from '@/components/umami-analytics';
 import { Video, Camera } from 'lucide-react';
 import type { DashboardSettings, WebcamConfig } from '@/lib/types';
-
-interface CameraInfo {
-  name: string;
-  service: string;
-  target_fps: number;
-  target_fps_idle: number;
-  current_fps: number;
-  aspect_ratio: string;
-  resolution: {
-    width: number;
-    height: number;
-  };
-  location: string;
-  enabled: boolean;
-}
-
-interface DetectedResolution {
-  width: number;
-  height: number;
-  timestamp: string;
-}
 
 interface CameraComponentProps {
   className?: string;
@@ -36,9 +14,9 @@ interface CameraComponentProps {
   onPrintComplete?: boolean;
 }
 
-export function CameraComponent({ className, isPrinting = false, onPrintComplete = false }: CameraComponentProps) {
-  const [cameraInfo, setCameraInfo] = useState<CameraInfo | null>(null);
-  const [detectedResolution, setDetectedResolution] = useState<DetectedResolution | null>(null);
+export function CameraComponent({ className, onPrintComplete = false }: CameraComponentProps) {
+  const [cameraInfo, setCameraInfo] = useState<any>(null);
+  const [detectedResolution, setDetectedResolution] = useState<any>(null);
   const [streamError, setStreamError] = useState(false);
   const [settings, setSettings] = useState<DashboardSettings | null>(null);
   const [webcams, setWebcams] = useState<(WebcamConfig & { database_enabled?: boolean })[]>([]);
@@ -47,73 +25,38 @@ export function CameraComponent({ className, isPrinting = false, onPrintComplete
   const imgRef = useRef<HTMLImageElement>(null);
   const confettiRef = useRef<ConfettiRef>(null);
 
-  // Fetch all camera data and settings in parallel on mount
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch camera data and settings in parallel
         const [cameraDataResponse, settingsResponse] = await Promise.all([
           fetch(selectedCameraUid ? `/api/camera/data?uid=${selectedCameraUid}` : '/api/camera/data'),
           fetch('/api/settings')
         ]);
 
-        // Process camera data
         if (cameraDataResponse.ok) {
           const cameraData = await cameraDataResponse.json();
-          
-          // Update webcams
           setWebcams(cameraData.webcams || []);
           
-          // Update enabled webcams
           const enabled = (cameraData.webcams || []).filter((w: WebcamConfig & { database_enabled?: boolean }) => 
             w.database_enabled !== false
           );
           setEnabledWebcams(enabled);
           
-          // Update selected camera
-          if (enabled.length > 0 && selectedCameraUid === null) {
-            if (enabled.length > 1) {
-              setSelectedCameraUid(null);
-            } else {
-              setSelectedCameraUid(enabled[0].uid);
-            }
+          if (cameraData.selectedCamera && selectedCameraUid === null) {
+            setSelectedCameraUid(cameraData.selectedCamera.uid);
           }
 
-          // Update camera info and resolution from consolidated response
           if (cameraData.selectedCamera) {
-            setCameraInfo({
-              uid: cameraData.selectedCamera.uid,
-              name: cameraData.selectedCamera.name,
-              location: cameraData.selectedCamera.location,
-              service: cameraData.selectedCamera.service,
-              target_fps: cameraData.selectedCamera.target_fps,
-              target_fps_idle: cameraData.selectedCamera.target_fps_idle,
-              stream_url: cameraData.selectedCamera.stream_url,
-              snapshot_url: cameraData.selectedCamera.snapshot_url,
-              flip_horizontal: cameraData.selectedCamera.flip_horizontal,
-              flip_vertical: cameraData.selectedCamera.flip_vertical,
-              rotation: cameraData.selectedCamera.rotation,
-              aspect_ratio: cameraData.selectedCamera.aspect_ratio,
-              icon: cameraData.selectedCamera.icon,
-              enabled: cameraData.selectedCamera.enabled,
-              source: cameraData.selectedCamera.source,
-              extra_data: cameraData.selectedCamera.extra_data
-            });
+            setCameraInfo(cameraData.selectedCamera);
           }
 
           if (cameraData.resolution) {
             setDetectedResolution(cameraData.resolution);
-            trackEvent('camera_resolution_detected', { 
-              width: cameraData.resolution.width, 
-              height: cameraData.resolution.height 
-            });
           }
         }
 
-        // Process settings
         if (settingsResponse.ok) {
-          const settingsData = await settingsResponse.json();
-          setSettings(settingsData);
+          setSettings(await settingsResponse.json());
         } else {
           setSettings({
             visibility_mode: 'public',
@@ -132,21 +75,8 @@ export function CameraComponent({ className, isPrinting = false, onPrintComplete
     };
 
     fetchData();
-  }, [selectedCameraUid]);
+  }, []);
 
-  const shouldShowVideo = settings?.video_feed_enabled !== false && settings?.visibility_mode !== 'private';
-
-  const handleStreamLoad = () => {
-    setStreamError(false);
-    trackEvent('camera_stream_success', { isPrinting });
-  };
-
-  const handleStreamError = () => {
-    setStreamError(true);
-    trackEvent('camera_stream_error', { isPrinting });
-  };
-
-  // Trigger confetti when print completes
   useEffect(() => {
     if (onPrintComplete && confettiRef.current) {
       const colors = ['#06b6d4', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b'];
@@ -177,7 +107,7 @@ export function CameraComponent({ className, isPrinting = false, onPrintComplete
       }, 400);
     }
   }, [onPrintComplete]);
-  // Check if settings indicate we shouldn't show video
+  
   const videoFeedDisabledMessage = settings?.video_feed_disabled_message || 'Video feed is disabled';
   
   if (settings?.visibility_mode === 'private' || settings?.video_feed_enabled === false) {
@@ -224,31 +154,7 @@ export function CameraComponent({ className, isPrinting = false, onPrintComplete
     );
   }
 
-  if (!shouldShowVideo) {
-    return (
-      <Card className={className}>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-medium flex items-center gap-2">
-              <Video className="h-5 w-5 text-gray-400" />
-              {cameraInfo.name} Camera
-            </CardTitle>
-            <Badge variant="outline" className="font-mono">
-              DISABLED
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-center h-48 bg-muted rounded-lg">
-            <div className="text-center text-muted-foreground">
-              <Video className="h-12 w-12 mx-auto mb-2 opacity-50" />
-              <p>{videoFeedDisabledMessage}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const shouldShowVideo = settings?.video_feed_enabled !== false && settings?.visibility_mode !== 'private';
 
   return (
     <Card className={className}>
@@ -294,7 +200,6 @@ export function CameraComponent({ className, isPrinting = false, onPrintComplete
       </CardHeader>
       <CardContent className="space-y-4">
         {selectedCameraUid === null ? (
-          // All cameras view - grid layout with stream only
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {enabledWebcams.map(cam => (
               <div key={cam.uid} className="space-y-2">
@@ -336,7 +241,6 @@ export function CameraComponent({ className, isPrinting = false, onPrintComplete
             ))}
           </div>
         ) : (
-          // Single camera view with stream only
         <div className="flex justify-center">
           <div 
             className="relative rounded-lg overflow-hidden bg-black"
@@ -355,8 +259,8 @@ export function CameraComponent({ className, isPrinting = false, onPrintComplete
                 src={selectedCameraUid ? `/api/camera/stream?uid=${selectedCameraUid}` : '/api/camera/stream'}
                 alt="Camera stream"
                 className="absolute inset-0 w-full h-full object-cover"
-                onLoad={handleStreamLoad}
-                onError={handleStreamError}
+                onLoad={() => setStreamError(false)}
+                onError={() => setStreamError(true)}
               />
               
               {streamError && (
@@ -377,7 +281,6 @@ export function CameraComponent({ className, isPrinting = false, onPrintComplete
             </div>
           )}
           
-          {/* Status badge */}
           <div className="absolute top-2 left-2">
             {shouldShowVideo && !streamError && (
               <Badge className="bg-red-600 hover:bg-red-700 text-white animate-pulse backdrop-blur-sm bg-opacity-90">
@@ -391,14 +294,12 @@ export function CameraComponent({ className, isPrinting = false, onPrintComplete
             )}
           </div>
 
-          {/* FPS display */}
           <div className="absolute bottom-2 right-2">
             <Badge variant="secondary" className="font-mono backdrop-blur-sm bg-black/70 text-white border-gray-600">
               {shouldShowVideo && !streamError ? `${cameraInfo.target_fps} FPS` : 'OFFLINE'}
             </Badge>
           </div>
 
-          {/* Confetti canvas */}
           <Confetti
             ref={confettiRef}
             manualstart={true}

@@ -68,7 +68,6 @@ export default function VerticalStreamClient({
 }: VerticalStreamClientProps) {
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
   const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
-  const [streamUrl, setStreamUrl] = useState<string>('/api/camera/stream')
   const [scrollPosition, setScrollPosition] = useState(0)
   const [scrollDirection, setScrollDirection] = useState<'forward' | 'backward'>('forward')
   const filenameRef = useRef<HTMLDivElement>(null)
@@ -132,8 +131,6 @@ export default function VerticalStreamClient({
           const tempHistory = await tempResponse.json()
           setTemperatureHistory(tempHistory)
         }
-
-        setStreamUrl(`/api/camera/stream?t=${Date.now()}`)
       } catch (error) {
         console.error('Error fetching printer data:', error)
       }
@@ -301,10 +298,13 @@ export default function VerticalStreamClient({
       {/* Full screen video feed - Portrait aspect ratio */}
       <div className="relative h-screen">
         <img
-          src={streamUrl}
+          src="/api/camera/stream"
           alt="Printer Camera Stream"
           className="w-full h-full object-cover"
-          style={{ imageRendering: 'crisp-edges' }}
+          style={{ 
+            imageRendering: 'auto',
+            willChange: 'transform'
+          }}
         />
 
         {/* Gradient overlays */}
