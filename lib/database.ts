@@ -1,4 +1,5 @@
 import { Pool, PoolClient } from 'pg'
+import { CameraSettings } from './types'
 
 let pool: Pool | null = null
 let databaseAvailable: boolean | null = null
@@ -127,6 +128,7 @@ export async function initializeDatabase(): Promise<void> {
         id SERIAL PRIMARY KEY,
         visibility_mode VARCHAR(20) NOT NULL DEFAULT 'public' CHECK (visibility_mode IN ('offline', 'private', 'public')),
         video_feed_enabled BOOLEAN NOT NULL DEFAULT true,
+        video_feed_disabled_message TEXT DEFAULT 'Video feed is disabled',
         dashboard_title VARCHAR(255) DEFAULT 's1pper''s Dashboard',
         dashboard_subtitle VARCHAR(255) DEFAULT 'A dashboard for s1pper, the Ender 3 S1 Pro',
         dashboard_icon_url TEXT,
@@ -140,6 +142,7 @@ export async function initializeDatabase(): Promise<void> {
         streaming_music_crossfade_enabled BOOLEAN NOT NULL DEFAULT false,
         streaming_music_crossfade_duration NUMERIC(3,1) NOT NULL DEFAULT 3.0 CHECK (streaming_music_crossfade_duration >= 0 AND streaming_music_crossfade_duration <= 10),
         streaming_title_enabled BOOLEAN NOT NULL DEFAULT true,
+        selected_camera_uid VARCHAR(255),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
@@ -159,6 +162,20 @@ export async function initializeDatabase(): Promise<void> {
       WHERE NOT EXISTS (SELECT 1 FROM dashboard_settings);
 
       CREATE INDEX IF NOT EXISTS idx_dashboard_settings_visibility ON dashboard_settings(visibility_mode);
+
+      CREATE TABLE IF NOT EXISTS camera_settings (
+        id SERIAL PRIMARY KEY,
+        uid VARCHAR(255) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        display_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_camera_settings_uid ON camera_settings(uid);
+      CREATE INDEX IF NOT EXISTS idx_camera_settings_enabled ON camera_settings(enabled);
+      CREATE INDEX IF NOT EXISTS idx_camera_settings_order ON camera_settings(display_order);
     `
 
     try {
@@ -204,6 +221,7 @@ export interface DashboardSettings {
   id: number
   visibility_mode: 'offline' | 'private' | 'public'
   video_feed_enabled: boolean
+  video_feed_disabled_message?: string
   dashboard_title: string
   dashboard_subtitle: string
   dashboard_icon_url: string | null
@@ -217,6 +235,7 @@ export interface DashboardSettings {
   streaming_music_crossfade_enabled: boolean
   streaming_music_crossfade_duration: number
   streaming_title_enabled: boolean
+  selected_camera_uid: string | null
   created_at: string
   updated_at: string
 }
@@ -242,6 +261,7 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       streaming_music_crossfade_enabled: false,
       streaming_music_crossfade_duration: 3.0,
       streaming_title_enabled: true,
+      selected_camera_uid: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -277,6 +297,7 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       streaming_music_crossfade_enabled: false,
       streaming_music_crossfade_duration: 3.0,
       streaming_title_enabled: true,
+      selected_camera_uid: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -299,7 +320,8 @@ export async function updateDashboardSettings(
   streaming_music_volume?: number,
   streaming_music_crossfade_enabled?: boolean,
   streaming_music_crossfade_duration?: number,
-  streaming_title_enabled?: boolean
+  streaming_title_enabled?: boolean,
+  selected_camera_uid?: string | null
 ): Promise<DashboardSettings | null> {
   if (!isDatabaseAvailable()) {
     console.warn('Cannot update dashboard settings: database not available')
@@ -402,6 +424,12 @@ export async function updateDashboardSettings(
       paramCount++
     }
 
+    if (selected_camera_uid !== undefined) {
+      updateFields.push(`selected_camera_uid = $${paramCount}`)
+      values.push(selected_camera_uid)
+      paramCount++
+    }
+
     if (updateFields.length === 0) {
       // No updates requested, return current settings
       return await getDashboardSettings()
@@ -421,5 +449,93 @@ export async function updateDashboardSettings(
   } catch (error) {
     console.error('Error updating dashboard settings:', error)
     return await getDashboardSettings() // Return default settings on error
+  }
+}
+// Camera settings functions
+export async function getCameraSettings(): Promise<CameraSettings[]> {
+  if (!isDatabaseAvailable()) {
+    return []
+  }
+
+  try {
+    const results = await query<CameraSettings>('SELECT * FROM camera_settings ORDER BY display_order, name')
+    return results
+  } catch (error) {
+    console.error('Error fetching camera settings:', error)
+    return []
+  }
+}
+
+export async function getCameraSettingByUid(uid: string): Promise<CameraSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const results = await query<CameraSettings>('SELECT * FROM camera_settings WHERE uid = $1', [uid])
+    return results[0] || null
+  } catch (error) {
+    console.error('Error fetching camera setting:', error)
+    return null
+  }
+}
+
+export async function upsertCameraSettings(cameras: Array<{ uid: string; name: string }>): Promise<void> {
+  if (!isDatabaseAvailable()) {
+    return
+  }
+
+  try {
+    for (const camera of cameras) {
+      await query(
+        `INSERT INTO camera_settings (uid, name, enabled) 
+         VALUES ($1, $2, true) 
+         ON CONFLICT (uid) 
+         DO UPDATE SET name = $2, updated_at = CURRENT_TIMESTAMP`,
+        [camera.uid, camera.name]
+      )
+    }
+  } catch (error) {
+    console.error('Error upserting camera settings:', error)
+  }
+}
+
+export async function updateCameraEnabled(uid: string, enabled: boolean): Promise<CameraSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const results = await query<CameraSettings>(
+      `UPDATE camera_settings 
+       SET enabled = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE uid = $2 
+       RETURNING *`,
+      [enabled, uid]
+    )
+    return results[0] || null
+  } catch (error) {
+    console.error('Error updating camera enabled state:', error)
+    return null
+  }
+}
+
+export async function updateCameraDisplayOrder(uid: string, display_order: number): Promise<CameraSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const results = await query<CameraSettings>(
+      `UPDATE camera_settings 
+       SET display_order = $1, updated_at = CURRENT_TIMESTAMP 
+       WHERE uid = $2 
+       RETURNING *`,
+      [display_order, uid]
+    )
+    return results[0] || null
+  } catch (error) {
+    console.error('Error updating camera display order:', error)
+    return null
   }
 }

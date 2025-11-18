@@ -196,3 +196,40 @@ export interface ConfigFile {
   language: 'gcode' | 'python'
   content: string
 }
+// Webcam configuration from Moonraker
+export interface WebcamConfig {
+  uid: string
+  name: string
+  location: string
+  service: string
+  enabled: boolean
+  icon: string
+  aspect_ratio: string
+  target_fps: number
+  target_fps_idle: number
+  stream_url: string
+  snapshot_url: string
+  flip_horizontal: boolean
+  flip_vertical: boolean
+  rotation: number
+  source: string
+  extra_data: Record<string, any>
+}
+
+// Moonraker webcam list response
+export interface MoonrakerWebcamListResponse {
+  result: {
+    webcams: WebcamConfig[]
+  }
+}
+
+// Camera settings stored in our database
+export interface CameraSettings {
+  id: number
+  uid: string
+  name: string
+  enabled: boolean
+  display_order: number
+  created_at: string
+  updated_at: string
+}

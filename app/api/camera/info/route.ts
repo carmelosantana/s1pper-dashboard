@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getDashboardSettings } from '@/lib/database';
 
 const PRINTER_IP = process.env.PRINTER_HOST;
 const MOONRAKER_PORT = process.env.MOONRAKER_PORT || '7127';
@@ -8,6 +9,7 @@ if (!PRINTER_IP) {
 }
 
 interface WebcamConfig {
+  uid: string;
   enabled: boolean;
   icon: string;
   aspect_ratio: string;
@@ -41,6 +43,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Get uid from query params
+    const searchParams = request.nextUrl.searchParams;
+    const uid = searchParams.get('uid') || undefined;
+
     const webcamListUrl = `http://${PRINTER_IP}:${MOONRAKER_PORT}/server/webcams/list`;
     
     console.log('Fetching webcam config from:', webcamListUrl);
@@ -69,8 +75,27 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Get the first (primary) webcam
-    const webcam = data.result.webcams[0];
+    // Find specific webcam by UID or get first webcam
+    let webcam: WebcamConfig;
+    if (uid) {
+      const found = data.result.webcams.find(w => w.uid === uid);
+      if (!found) {
+        return NextResponse.json(
+          { error: `Webcam with UID ${uid} not found` }, 
+          { status: 404 }
+        );
+      }
+      webcam = found;
+    } else {
+      // No uid provided, check if there's a selected camera in settings
+      const settings = await getDashboardSettings();
+      if (settings?.selected_camera_uid) {
+        const selectedWebcam = data.result.webcams.find(w => w.uid === settings.selected_camera_uid);
+        webcam = selectedWebcam || data.result.webcams[0];
+      } else {
+        webcam = data.result.webcams[0];
+      }
+    }
     
     // Calculate resolution from aspect ratio (this is an approximation)
     // Most common resolutions for 4:3 aspect ratio

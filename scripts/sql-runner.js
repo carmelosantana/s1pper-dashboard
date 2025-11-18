@@ -36,15 +36,22 @@ const pool = new Pool({
   connectionTimeoutMillis: 5000,
 })
 
-// Create readline interface
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-  prompt: 'guestbook-sql> '
-})
+// Check for command-line arguments (non-interactive mode)
+const args = process.argv.slice(2)
+const isNonInteractive = args.length > 0
 
-console.log('🔗 Connected to PostgreSQL database')
-console.log('Type .help for available commands, .quit to exit\n')
+// Create readline interface only for interactive mode
+let rl
+if (!isNonInteractive) {
+  rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: 'guestbook-sql> '
+  })
+
+  console.log('🔗 Connected to PostgreSQL database')
+  console.log('Type .help for available commands, .quit to exit\n')
+}
 
 // Helper functions
 async function executeQuery(query) {
@@ -445,27 +452,56 @@ async function handleCommand(input) {
 }
 
 // Handle readline events
-rl.on('line', async (input) => {
-  await handleCommand(input)
-  rl.prompt()
-})
+if (!isNonInteractive) {
+  rl.on('line', async (input) => {
+    await handleCommand(input)
+    rl.prompt()
+  })
 
-rl.on('close', async () => {
-  console.log('\nGoodbye! 👋')
-  await pool.end()
-  process.exit(0)
-})
+  rl.on('close', async () => {
+    console.log('\nGoodbye! 👋')
+    await pool.end()
+    process.exit(0)
+  })
+
+  // Start the prompt
+  rl.prompt()
+} else {
+  // Non-interactive mode: execute command from arguments
+  (async () => {
+    try {
+      // Join all arguments to support SQL queries with spaces
+      const command = args.join(' ')
+      
+      // Check if it's a file path (ends with .sql)
+      if (command.endsWith('.sql') && fs.existsSync(command)) {
+        console.log(`📄 Executing SQL file: ${command}`)
+        const sqlContent = fs.readFileSync(command, 'utf8')
+        const result = await executeQuery(sqlContent)
+        formatResults(result)
+      } else {
+        // Execute as direct SQL command or special command
+        await handleCommand(command)
+      }
+      
+      await pool.end()
+      process.exit(0)
+    } catch (error) {
+      console.error('❌ Error:', error.message)
+      await pool.end()
+      process.exit(1)
+    }
+  })()
+}
 
 // Handle errors
 process.on('unhandledRejection', (error) => {
   console.error('Unhandled promise rejection:', error)
 })
 
+
 process.on('SIGINT', async () => {
   console.log('\n\nReceived SIGINT. Gracefully shutting down...')
   await pool.end()
   process.exit(0)
 })
-
-// Start the prompt
-rl.prompt()

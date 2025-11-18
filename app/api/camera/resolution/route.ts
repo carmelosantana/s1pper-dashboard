@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
-import sharp from 'sharp';
+import { NextRequest, NextResponse } from 'next/server';
+import { MoonrakerWebcamListResponse, WebcamConfig } from '@/lib/types';
+import { getDashboardSettings } from '@/lib/database';
 
 const PRINTER_IP = process.env.PRINTER_HOST;
 const MOONRAKER_PORT = process.env.MOONRAKER_PORT || '7127';
@@ -8,37 +9,57 @@ if (!PRINTER_IP) {
   console.error('PRINTER_HOST environment variable is not set');
 }
 
-interface WebcamConfig {
-  snapshot_url: string;
-}
-
-interface WebcamListResponse {
-  result: {
-    webcams: WebcamConfig[];
+// Common resolution mappings based on aspect ratio
+function getResolutionFromAspectRatio(aspectRatio: string): { width: number; height: number } {
+  const commonResolutions: Record<string, { width: number; height: number }> = {
+    '16:9': { width: 1920, height: 1080 },
+    '4:3': { width: 1280, height: 960 },
+    '1:1': { width: 1080, height: 1080 },
   };
+  
+  return commonResolutions[aspectRatio] || { width: 1920, height: 1080 };
 }
 
-async function getCameraSnapshotUrl(): Promise<string> {
+async function getCameraResolution(uid?: string): Promise<{ width: number; height: number }> {
   try {
     // Get camera config from Moonraker
     const response = await fetch(`http://${PRINTER_IP}:${MOONRAKER_PORT}/server/webcams/list`);
     if (response.ok) {
-      const data: WebcamListResponse = await response.json();
-      const webcam = data.result.webcams[0];
-      if (webcam?.snapshot_url) {
-        // Build full URL - snapshot_url is relative
-        return `http://${PRINTER_IP}${webcam.snapshot_url}`;
+      const data: MoonrakerWebcamListResponse = await response.json();
+      
+      let webcam: WebcamConfig | undefined;
+      
+      if (uid) {
+        // Find specific webcam by UID
+        webcam = data.result.webcams.find(w => w.uid === uid);
+      } else {
+        // No uid provided, check if there's a selected camera in settings
+        const settings = await getDashboardSettings();
+        if (settings?.selected_camera_uid) {
+          webcam = data.result.webcams.find(w => w.uid === settings.selected_camera_uid);
+        }
+        
+        // Fallback to first webcam if selected camera not found or no selection
+        if (!webcam) {
+          webcam = data.result.webcams[0];
+        }
+      }
+      
+      if (webcam) {
+        // Use aspect ratio to determine resolution
+        const aspectRatio = webcam.aspect_ratio || '16:9';
+        return getResolutionFromAspectRatio(aspectRatio);
       }
     }
   } catch (error) {
     console.error('Failed to get camera config:', error);
   }
   
-  // Fallback to direct snapshot URL
-  return `http://${PRINTER_IP}/webcam/?action=snapshot`;
+  // Fallback to standard 1080p
+  return { width: 1920, height: 1080 };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     // Check if PRINTER_IP is configured
     if (!PRINTER_IP) {
@@ -48,48 +69,22 @@ export async function GET() {
       );
     }
 
-    const snapshotUrl = await getCameraSnapshotUrl();
+    // Get uid from query params
+    const searchParams = request.nextUrl.searchParams;
+    const uid = searchParams.get('uid') || undefined;
 
-    // Fetch a snapshot to determine the actual resolution
-    const response = await fetch(snapshotUrl, {
+    const resolution = await getCameraResolution(uid);
+
+    return NextResponse.json({
+      width: resolution.width,
+      height: resolution.height,
+      timestamp: new Date().toISOString()
+    }, {
       headers: {
-        'User-Agent': 'Mozilla/5.0',
-      },
-      cache: 'no-store'
-    });
-
-    if (!response.ok) {
-      console.error('Failed to fetch camera snapshot for resolution detection:', response.status);
-      return NextResponse.json({ error: 'Failed to fetch camera snapshot' }, { status: 500 });
-    }
-
-    const imageBuffer = await response.arrayBuffer();
-    
-    try {
-      // Use sharp to get image metadata
-      const metadata = await sharp(Buffer.from(imageBuffer)).metadata();
-      
-      if (!metadata.width || !metadata.height) {
-        console.error('Could not determine image dimensions');
-        return NextResponse.json({ error: 'Could not determine image dimensions' }, { status: 500 });
+        // Cache for 1 hour since aspect ratio doesn't change
+        'Cache-Control': 'public, max-age=3600, stale-while-revalidate=7200',
       }
-
-      return NextResponse.json({
-        width: metadata.width,
-        height: metadata.height,
-        format: metadata.format,
-        timestamp: new Date().toISOString()
-      }, {
-        headers: {
-          // Cache for 5 minutes to avoid excessive requests
-          'Cache-Control': 'public, max-age=300, stale-while-revalidate=600',
-        }
-      });
-
-    } catch (sharpError) {
-      console.error('Sharp processing error:', sharpError);
-      return NextResponse.json({ error: 'Failed to process image' }, { status: 500 });
-    }
+    });
 
   } catch (error) {
     console.error('Camera resolution detection error:', error);

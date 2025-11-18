@@ -102,6 +102,7 @@ export async function GET(request: NextRequest) {
       streaming_music_crossfade_enabled: settings.streaming_music_crossfade_enabled || false,
       streaming_music_crossfade_duration: settings.streaming_music_crossfade_duration || 3.0,
       streaming_title_enabled: settings.streaming_title_enabled ?? true,
+      selected_camera_uid: settings.selected_camera_uid,
       updated_at: settings.updated_at
     })
   } catch (error) {
@@ -160,7 +161,8 @@ export async function PUT(request: NextRequest) {
       streaming_music_volume,
       streaming_music_crossfade_enabled,
       streaming_music_crossfade_duration,
-      streaming_title_enabled
+      streaming_title_enabled,
+      selected_camera_uid
     } = body
 
     // Validate input
@@ -262,7 +264,8 @@ export async function PUT(request: NextRequest) {
       streaming_music_volume,
       streaming_music_crossfade_enabled,
       streaming_music_crossfade_duration,
-      streaming_title_enabled
+      streaming_title_enabled,
+      selected_camera_uid
     )
     
     if (!updatedSettings) {
@@ -288,6 +291,7 @@ export async function PUT(request: NextRequest) {
       streaming_music_crossfade_enabled: updatedSettings.streaming_music_crossfade_enabled || false,
       streaming_music_crossfade_duration: updatedSettings.streaming_music_crossfade_duration || 3.0,
       streaming_title_enabled: updatedSettings.streaming_title_enabled ?? true,
+      selected_camera_uid: updatedSettings.selected_camera_uid,
       updated_at: updatedSettings.updated_at
     })
 
