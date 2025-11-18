@@ -16,6 +16,9 @@ interface StreamViewClientProps {
   musicLoop: boolean
   musicCrossfadeEnabled: boolean
   musicCrossfadeDuration: number
+  streamingTitleEnabled: boolean
+  dashboardTitle: string
+  dashboardSubtitle: string
 }
 
 function formatTime(seconds: number): string {
@@ -58,7 +61,10 @@ export default function StreamViewClient({
   musicPlaylist,
   musicLoop,
   musicCrossfadeEnabled,
-  musicCrossfadeDuration
+  musicCrossfadeDuration,
+  streamingTitleEnabled,
+  dashboardTitle,
+  dashboardSubtitle
 }: StreamViewClientProps) {
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
   const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
@@ -159,13 +165,15 @@ export default function StreamViewClient({
 
       {/* Top Left: Printer Status */}
       <div className="absolute top-6 left-6 space-y-3">
-        <div className="flex items-center gap-3">
-          <Activity className="h-8 w-8 text-cyan-500" />
-          <div>
-            <h1 className="text-2xl font-bold text-white">s1pper</h1>
-            <p className="text-sm text-gray-300">Ender 3 S1 Pro</p>
+        {streamingTitleEnabled && (
+          <div className="flex items-center gap-3">
+            <Activity className="h-8 w-8 text-cyan-500" />
+            <div>
+              <h1 className="text-2xl font-bold text-white">{dashboardTitle}</h1>
+              <p className="text-sm text-gray-300">{dashboardSubtitle}</p>
+            </div>
           </div>
-        </div>
+        )}
         
         <Badge
           className={

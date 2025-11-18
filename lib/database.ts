@@ -139,6 +139,7 @@ export async function initializeDatabase(): Promise<void> {
         streaming_music_playlist TEXT[] DEFAULT '{}',
         streaming_music_crossfade_enabled BOOLEAN NOT NULL DEFAULT false,
         streaming_music_crossfade_duration NUMERIC(3,1) NOT NULL DEFAULT 3.0 CHECK (streaming_music_crossfade_duration >= 0 AND streaming_music_crossfade_duration <= 10),
+        streaming_title_enabled BOOLEAN NOT NULL DEFAULT true,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
@@ -215,6 +216,7 @@ export interface DashboardSettings {
   streaming_music_playlist: string[]
   streaming_music_crossfade_enabled: boolean
   streaming_music_crossfade_duration: number
+  streaming_title_enabled: boolean
   created_at: string
   updated_at: string
 }
@@ -239,6 +241,7 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       streaming_music_playlist: [],
       streaming_music_crossfade_enabled: false,
       streaming_music_crossfade_duration: 3.0,
+      streaming_title_enabled: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -273,6 +276,7 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       streaming_music_playlist: [],
       streaming_music_crossfade_enabled: false,
       streaming_music_crossfade_duration: 3.0,
+      streaming_title_enabled: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -294,7 +298,8 @@ export async function updateDashboardSettings(
   streaming_music_playlist?: string[],
   streaming_music_volume?: number,
   streaming_music_crossfade_enabled?: boolean,
-  streaming_music_crossfade_duration?: number
+  streaming_music_crossfade_duration?: number,
+  streaming_title_enabled?: boolean
 ): Promise<DashboardSettings | null> {
   if (!isDatabaseAvailable()) {
     console.warn('Cannot update dashboard settings: database not available')
@@ -388,6 +393,12 @@ export async function updateDashboardSettings(
     if (streaming_music_crossfade_duration !== undefined) {
       updateFields.push(`streaming_music_crossfade_duration = $${paramCount}`)
       values.push(streaming_music_crossfade_duration)
+      paramCount++
+    }
+
+    if (streaming_title_enabled !== undefined) {
+      updateFields.push(`streaming_title_enabled = $${paramCount}`)
+      values.push(streaming_title_enabled)
       paramCount++
     }
 

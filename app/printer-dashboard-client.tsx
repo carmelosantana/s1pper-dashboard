@@ -19,7 +19,6 @@ import { trackEvent } from "@/components/umami-analytics"
 import { formatTime, formatFilamentLength, formatLifetimeTime, formatFinishTime } from "@/lib/utils/formatting"
 
 import GuestbookCard from "@/components/guestbook-card"
-import SettingsCard from "@/components/settings-card"
 import { SettingsControl } from "@/components/settings-control"
 
 interface PrinterDashboardClientProps {
@@ -45,10 +44,6 @@ export default function PrinterDashboardClient({
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
   const [previousProgress, setPreviousProgress] = useState<number>(0)
   const [hasShownConfetti, setHasShownConfetti] = useState<boolean>(false)
-  const [dashboardSettings, setDashboardSettings] = useState<{
-    visibility_mode: 'offline' | 'private' | 'public'
-    video_feed_enabled: boolean
-  } | null>(null)
   const confettiRef = useRef<ConfettiRef>(null)
 
   // Function to trigger celebration confetti
@@ -98,23 +93,6 @@ export default function PrinterDashboardClient({
       }, 400)
     }
   }
-
-  // Load dashboard settings
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const response = await fetch('/api/settings')
-        if (response.ok) {
-          const settings = await response.json()
-          setDashboardSettings(settings)
-        }
-      } catch (error) {
-        console.error('Error loading dashboard settings:', error)
-      }
-    }
-    
-    loadSettings()
-  }, [])
 
   // Fetch fresh data every 3 seconds
   useEffect(() => {
@@ -743,11 +721,6 @@ export default function PrinterDashboardClient({
 
             {/* Guestbook */}
             <GuestbookCard className="bg-zinc-950 border-zinc-800" />
-
-            {/* Settings - only show if database is configured */}
-            {isDatabaseConfigured && (
-              <SettingsCard />
-            )}
 
           </div>
         </div>

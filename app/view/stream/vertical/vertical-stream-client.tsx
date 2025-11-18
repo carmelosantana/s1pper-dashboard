@@ -16,6 +16,9 @@ interface VerticalStreamClientProps {
   musicLoop: boolean
   musicCrossfadeEnabled: boolean
   musicCrossfadeDuration: number
+  streamingTitleEnabled: boolean
+  dashboardTitle: string
+  dashboardSubtitle: string
 }
 
 function formatTime(seconds: number): string {
@@ -58,7 +61,10 @@ export default function VerticalStreamClient({
   musicPlaylist,
   musicLoop,
   musicCrossfadeEnabled,
-  musicCrossfadeDuration
+  musicCrossfadeDuration,
+  streamingTitleEnabled,
+  dashboardTitle,
+  dashboardSubtitle
 }: VerticalStreamClientProps) {
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
   const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
@@ -308,13 +314,15 @@ export default function VerticalStreamClient({
         {/* Header: Logo and Status */}
         <div className="absolute top-8 left-8 right-8 space-y-5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Activity className="h-10 w-10 text-cyan-500" />
-              <div>
-                <h1 className="text-3xl font-bold text-white">s1pper</h1>
-                <p className="text-base text-gray-300">Ender 3 S1 Pro</p>
+            {streamingTitleEnabled && (
+              <div className="flex items-center gap-4">
+                <Activity className="h-10 w-10 text-cyan-500" />
+                <div>
+                  <h1 className="text-3xl font-bold text-white">{dashboardTitle}</h1>
+                  <p className="text-base text-gray-300">{dashboardSubtitle}</p>
+                </div>
               </div>
-            </div>
+            )}
             
             <Badge
               className={

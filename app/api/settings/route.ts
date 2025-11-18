@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
       streaming_music_volume: settings.streaming_music_volume || 50,
       streaming_music_crossfade_enabled: settings.streaming_music_crossfade_enabled || false,
       streaming_music_crossfade_duration: settings.streaming_music_crossfade_duration || 3.0,
+      streaming_title_enabled: settings.streaming_title_enabled ?? true,
       updated_at: settings.updated_at
     })
   } catch (error) {
@@ -158,7 +159,8 @@ export async function PUT(request: NextRequest) {
       streaming_music_playlist,
       streaming_music_volume,
       streaming_music_crossfade_enabled,
-      streaming_music_crossfade_duration
+      streaming_music_crossfade_duration,
+      streaming_title_enabled
     } = body
 
     // Validate input
@@ -237,6 +239,13 @@ export async function PUT(request: NextRequest) {
       body.streaming_music_crossfade_duration = Math.round(duration * 10) / 10
     }
 
+    if (streaming_title_enabled !== undefined && typeof streaming_title_enabled !== 'boolean') {
+      return NextResponse.json(
+        { error: 'Invalid streaming_title_enabled. Must be a boolean' },
+        { status: 400 }
+      )
+    }
+
     // Update settings
     const updatedSettings = await updateDashboardSettings(
       visibility_mode,
@@ -252,7 +261,8 @@ export async function PUT(request: NextRequest) {
       streaming_music_playlist,
       streaming_music_volume,
       streaming_music_crossfade_enabled,
-      streaming_music_crossfade_duration
+      streaming_music_crossfade_duration,
+      streaming_title_enabled
     )
     
     if (!updatedSettings) {
@@ -277,6 +287,7 @@ export async function PUT(request: NextRequest) {
       streaming_music_volume: updatedSettings.streaming_music_volume || 50,
       streaming_music_crossfade_enabled: updatedSettings.streaming_music_crossfade_enabled || false,
       streaming_music_crossfade_duration: updatedSettings.streaming_music_crossfade_duration || 3.0,
+      streaming_title_enabled: updatedSettings.streaming_title_enabled ?? true,
       updated_at: updatedSettings.updated_at
     })
 

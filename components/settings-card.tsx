@@ -41,6 +41,7 @@ interface DashboardSettings {
   streaming_music_playlist: string[]
   streaming_music_crossfade_enabled: boolean
   streaming_music_crossfade_duration: number
+  streaming_title_enabled: boolean
 }
 
 interface MusicFile {
@@ -99,7 +100,8 @@ export default function SettingsCard() {
           ...data,
           streaming_music_playlist: data.streaming_music_playlist || [],
           streaming_music_crossfade_enabled: data.streaming_music_crossfade_enabled ?? false,
-          streaming_music_crossfade_duration: data.streaming_music_crossfade_duration ?? 3.0
+          streaming_music_crossfade_duration: data.streaming_music_crossfade_duration ?? 3.0,
+          streaming_title_enabled: data.streaming_title_enabled ?? true
         }
         setSettings(settingsWithDefaults)
         setOriginalSettings(settingsWithDefaults)
@@ -597,6 +599,29 @@ export default function SettingsCard() {
           <TabsContent value="streaming" className="space-y-4">
             <div className="space-y-4">
               <div>
+                <h3 className="text-sm font-semibold mb-3">Stream Display Settings</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="stream-title-enabled">
+                        {settings.streaming_title_enabled ? 'Hide Stream Title' : 'Show Stream Title'}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {settings.streaming_title_enabled 
+                          ? 'Title and subtitle are visible on stream views' 
+                          : 'Title and subtitle are hidden on stream views'}
+                      </p>
+                    </div>
+                    <Switch
+                      id="stream-title-enabled"
+                      checked={settings.streaming_title_enabled}
+                      onCheckedChange={(checked) => updateSettings({ streaming_title_enabled: checked })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-zinc-800 pt-4">
                 <h3 className="text-sm font-semibold mb-3">Music Settings</h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
