@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Activity, Thermometer, Clock, Zap, Layers } from 'lucide-react'
 import { FaviconManager } from '@/components/favicon-manager'
 import { StreamMusicPlayer } from '@/components/stream-music-player'
+import { usePrinterData } from '@/lib/hooks/use-printer-data'
 import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
 
 interface VerticalStreamClientProps {
@@ -66,8 +67,7 @@ export default function VerticalStreamClient({
   dashboardTitle,
   dashboardSubtitle
 }: VerticalStreamClientProps) {
-  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
-  const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
+  const { printerStatus, temperatureHistory, isConnected } = usePrinterData()
   const [scrollPosition, setScrollPosition] = useState(0)
   const [scrollDirection, setScrollDirection] = useState<'forward' | 'backward'>('forward')
   const filenameRef = useRef<HTMLDivElement>(null)
@@ -113,39 +113,7 @@ export default function VerticalStreamClient({
     return () => clearInterval(interval)
   }, [printerStatus?.print.filename])
 
-  // Fetch fresh data every 3 seconds
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [statusResponse, tempResponse] = await Promise.all([
-          fetch('/api/printer/status', { cache: 'no-store' }),
-          fetch('/api/printer/temperature-history', { cache: 'no-store' })
-        ])
-
-        if (statusResponse.ok) {
-          const status = await statusResponse.json()
-          setPrinterStatus(status)
-        }
-
-        if (tempResponse.ok) {
-          const tempHistory = await tempResponse.json()
-          setTemperatureHistory(tempHistory)
-        }
-      } catch (error) {
-        console.error('Error fetching printer data:', error)
-      }
-    }
-
-    const initialDelay = setTimeout(fetchData, 1000)
-    const interval = setInterval(fetchData, 3000)
-
-    return () => {
-      clearTimeout(initialDelay)
-      clearInterval(interval)
-    }
-  }, [])
-
-  if (!printerStatus || printerStatus.print.state === 'offline') {
+  if (!isConnected || !printerStatus || printerStatus.print.state === 'offline') {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <FaviconManager status="offline" />
@@ -183,7 +151,7 @@ export default function VerticalStreamClient({
                     / {Math.round(printerStatus.temperatures.extruder.target)}°
                   </span>
                 </div>
-                {printerStatus.temperatures.extruder.power > 0 && (
+                {(printerStatus.temperatures.extruder.target > 0 || printerStatus.temperatures.extruder.power > 0) && (
                   <div className="mt-2">
                     <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
                       <div
@@ -204,7 +172,7 @@ export default function VerticalStreamClient({
                     / {Math.round(printerStatus.temperatures.bed.target)}°
                   </span>
                 </div>
-                {printerStatus.temperatures.bed.power > 0 && (
+                {(printerStatus.temperatures.bed.target > 0 || printerStatus.temperatures.bed.power > 0) && (
                   <div className="mt-2">
                     <div className="w-full bg-gray-800 rounded-full h-2 overflow-hidden">
                       <div

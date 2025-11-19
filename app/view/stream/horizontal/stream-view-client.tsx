@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Activity, Thermometer } from 'lucide-react'
 import { FaviconManager } from '@/components/favicon-manager'
 import { StreamMusicPlayer } from '@/components/stream-music-player'
+import { usePrinterData } from '@/lib/hooks/use-printer-data'
 import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
 
 interface StreamViewClientProps {
@@ -66,8 +67,7 @@ export default function StreamViewClient({
   dashboardTitle,
   dashboardSubtitle
 }: StreamViewClientProps) {
-  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
-  const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
+  const { printerStatus, temperatureHistory, isConnected } = usePrinterData()
   const [currentTime, setCurrentTime] = useState<Date>(new Date())
 
   // Update current time every second
@@ -78,42 +78,7 @@ export default function StreamViewClient({
     return () => clearInterval(timer)
   }, [])
 
-  // Fetch fresh data every 3 seconds
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [statusResponse, tempResponse] = await Promise.all([
-          fetch('/api/printer/status', { cache: 'no-store' }),
-          fetch('/api/printer/temperature-history', { cache: 'no-store' })
-        ])
-
-        if (statusResponse.ok) {
-          const status = await statusResponse.json()
-          setPrinterStatus(status)
-        }
-
-        if (tempResponse.ok) {
-          const tempHistory = await tempResponse.json()
-          setTemperatureHistory(tempHistory)
-        }
-      } catch (error) {
-        console.error('Error fetching printer data:', error)
-      }
-    }
-
-    // Initial fetch after component mounts
-    const initialDelay = setTimeout(fetchData, 1000)
-    
-    // Then fetch every 3 seconds
-    const interval = setInterval(fetchData, 3000)
-
-    return () => {
-      clearTimeout(initialDelay)
-      clearInterval(interval)
-    }
-  }, [])
-
-  if (!printerStatus || printerStatus.print.state === 'offline') {
+  if (!isConnected || !printerStatus || printerStatus.print.state === 'offline') {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <FaviconManager status="offline" />
@@ -285,7 +250,7 @@ export default function StreamViewClient({
               / {Math.round(printerStatus.temperatures.extruder.target)}°C
             </span>
           </div>
-          {printerStatus.temperatures.extruder.power > 0 && (
+          {(printerStatus.temperatures.extruder.target > 0 || printerStatus.temperatures.extruder.power > 0) && (
             <div className="mt-2">
               <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
                 <div
@@ -314,7 +279,7 @@ export default function StreamViewClient({
               / {Math.round(printerStatus.temperatures.bed.target)}°C
             </span>
           </div>
-          {printerStatus.temperatures.bed.power > 0 && (
+          {(printerStatus.temperatures.bed.target > 0 || printerStatus.temperatures.bed.power > 0) && (
             <div className="mt-2">
               <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
                 <div

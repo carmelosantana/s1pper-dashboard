@@ -12,6 +12,7 @@ import { SparklesText } from "@/components/ui/sparkles-text"
 import { AuroraText } from "@/components/ui/aurora-text"
 import { FaviconManager } from "@/components/favicon-manager"
 import { Confetti, type ConfettiRef } from "@/components/ui/confetti"
+import { usePrinterData } from "@/lib/hooks/use-printer-data"
 import type { PrinterStatus, TemperatureHistory, LifetimeStats } from '@/lib/types'
 import { CameraComponent } from "@/components/camera-component"
 import { CircularProgress } from "@/components/ui/circular-progress"
@@ -38,8 +39,7 @@ export default function PrinterDashboardClient({
   dashboardTitle = "s1pper's Dashboard",
   dashboardSubtitle = "A dashboard for s1pper, the Ender 3 S1 Pro"
 }: PrinterDashboardClientProps) {
-  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
-  const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
+  const { printerStatus, temperatureHistory, isConnected } = usePrinterData()
   const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats | null>(initialLifetimeStats)
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
   const [previousProgress, setPreviousProgress] = useState<number>(0)
@@ -94,83 +94,67 @@ export default function PrinterDashboardClient({
     }
   }
 
-  // Fetch fresh data every 3 seconds
+  // Watch for print completion to trigger confetti
   useEffect(() => {
-    const fetchData = async () => {
+    if (printerStatus) {
+      const currentProgress = Math.round(printerStatus.print.progress * 100)
+      const isCompleted = printerStatus.print.state === 'complete'
+      const isPrinting = printerStatus.print.state === 'printing'
+      const justReached100 = currentProgress === 100 && previousProgress < 100
+      const justCompleted = isCompleted && previousProgress < 100
+      
+      if ((justReached100 || justCompleted) && !hasShownConfetti) {
+        // Trigger confetti effect
+        triggerCelebrationConfetti()
+        setHasShownConfetti(true)
+        trackEvent('print_completed', { 
+          reason: justReached100 ? 'progress_100' : 'status_complete',
+          filename: printerStatus.print.filename || 'unknown',
+          printTime: printerStatus.print.print_time || 0
+        })
+      }
+      
+      // Reset confetti flag when starting a new print
+      if (isPrinting && hasShownConfetti && currentProgress < 100) {
+        setHasShownConfetti(false)
+        trackEvent('print_started', {
+          filename: printerStatus.print.filename || 'unknown'
+        })
+      }
+      
+      setPreviousProgress(currentProgress)
+    }
+  }, [printerStatus, previousProgress, hasShownConfetti])
+
+  // Fetch lifetime stats separately (less frequent updates needed)
+  useEffect(() => {
+    const fetchLifetimeStats = async () => {
       try {
-        const [statusResponse, tempResponse, lifetimeResponse] = await Promise.all([
-          fetch('/api/printer/status', { cache: 'no-store' }),
-          fetch('/api/printer/temperature-history', { cache: 'no-store' }),
-          fetch('/api/printer/lifetime-stats', { cache: 'no-store' })
-        ])
-
-        if (statusResponse.ok) {
-          const status = await statusResponse.json()
-          setPrinterStatus(prevStatus => {
-            // Check for print completion to trigger confetti
-            if (prevStatus && status) {
-              const currentProgress = Math.round(status.print.progress * 100)
-              const wasCompleted = prevStatus.print.state === 'complete'
-              const isNowCompleted = status.print.state === 'complete'
-              const justReached100 = !wasCompleted && currentProgress === 100 && previousProgress < 100
-              const justCompleted = !wasCompleted && isNowCompleted
-              
-              if ((justReached100 || justCompleted) && !hasShownConfetti) {
-                // Trigger confetti effect
-                triggerCelebrationConfetti()
-                setHasShownConfetti(true)
-                trackEvent('print_completed', { 
-                  reason: justReached100 ? 'progress_100' : 'status_complete',
-                  filename: status.print.filename || 'unknown',
-                  printTime: status.print.print_time || 0
-                })
-              }
-              
-              // Reset confetti flag when starting a new print
-              if (prevStatus.print.state === 'complete' && status.print.state === 'printing') {
-                setHasShownConfetti(false)
-                trackEvent('print_started', {
-                  previousState: prevStatus.print.state,
-                  filename: status.print.filename || 'unknown'
-                })
-              }
-              
-              setPreviousProgress(currentProgress)
-            }
-            return status
-          })
-        }
-
-        if (tempResponse.ok) {
-          const tempHistory = await tempResponse.json()
-          setTemperatureHistory(tempHistory)
-        }
-
-        if (lifetimeResponse.ok) {
-          const lifetimeData = await lifetimeResponse.json()
+        const response = await fetch('/api/printer/lifetime-stats', { cache: 'no-store' })
+        if (response.ok) {
+          const lifetimeData = await response.json()
           setLifetimeStats(lifetimeData)
         }
-
-        setLastUpdated(new Date())
       } catch (error) {
-        console.error('Error fetching printer data:', error)
+        console.error('Error fetching lifetime stats:', error)
       }
     }
 
-    // Initial fetch after component mounts
-    const initialDelay = setTimeout(fetchData, 1000)
-    
-    // Then fetch every 3 seconds
-    const interval = setInterval(fetchData, 3000)
-
-    return () => {
-      clearTimeout(initialDelay)
-      clearInterval(interval)
-    }
+    // Fetch on mount and every 30 seconds (lifetime stats change slowly)
+    fetchLifetimeStats()
+    const interval = setInterval(fetchLifetimeStats, 30000)
+    return () => clearInterval(interval)
   }, [])
 
+  // Update lastUpdated when printer status changes
+  useEffect(() => {
+    if (printerStatus) {
+      setLastUpdated(new Date())
+    }
+  }, [printerStatus])
+
   // Handle offline state
-  if (!printerStatus || printerStatus.print.state === 'offline') {
+  if (!isConnected || !printerStatus || printerStatus.print.state === 'offline') {
     // Check if this is a configuration error
     const isConfigurationError = printerStatus?.system?.klippyMessage?.includes('PRINTER_HOST environment variable not configured')
     
