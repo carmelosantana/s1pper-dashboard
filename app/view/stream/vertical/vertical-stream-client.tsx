@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Activity, Thermometer, Clock, Zap, Layers } from 'lucide-react'
 import { FaviconManager } from '@/components/favicon-manager'
 import { StreamMusicPlayer } from '@/components/stream-music-player'
+import { MultiCameraStream } from '@/components/multi-camera-stream'
 import { usePrinterData } from '@/lib/hooks/use-printer-data'
 import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
 
@@ -20,6 +21,8 @@ interface VerticalStreamClientProps {
   streamingTitleEnabled: boolean
   dashboardTitle: string
   dashboardSubtitle: string
+  streamCameraDisplayMode: 'single' | 'grid' | 'pip'
+  enabledCameras: Array<{ uid: string; name: string; enabled: boolean }>
 }
 
 function formatTime(seconds: number): string {
@@ -65,7 +68,9 @@ export default function VerticalStreamClient({
   musicCrossfadeDuration,
   streamingTitleEnabled,
   dashboardTitle,
-  dashboardSubtitle
+  dashboardSubtitle,
+  streamCameraDisplayMode,
+  enabledCameras
 }: VerticalStreamClientProps) {
   const { printerStatus, temperatureHistory, isConnected } = usePrinterData()
   const [scrollPosition, setScrollPosition] = useState(0)
@@ -113,13 +118,26 @@ export default function VerticalStreamClient({
     return () => clearInterval(interval)
   }, [printerStatus?.print.filename])
 
-  if (!isConnected || !printerStatus || printerStatus.print.state === 'offline') {
+  // Only show full offline screen if truly disconnected (no status at all)
+  const isTrulyOffline = !isConnected || !printerStatus
+  const isPrinterOffline = printerStatus?.print.state === 'offline'
+  
+  if (isTrulyOffline) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <FaviconManager status="offline" />
+        {/* Keep music playing even when disconnected */}
+        <StreamMusicPlayer 
+          enabled={musicEnabled}
+          volume={musicVolume}
+          playlist={musicPlaylist}
+          loop={musicLoop}
+          crossfadeEnabled={musicCrossfadeEnabled}
+          crossfadeDuration={musicCrossfadeDuration}
+        />
         <div className="text-center">
           <Activity className="h-16 w-16 mx-auto mb-4 text-gray-500" />
-          <h1 className="text-2xl font-bold mb-2">Printer Offline</h1>
+          <h1 className="text-2xl font-bold mb-2">Printer Disconnected</h1>
           <p className="text-gray-400">Waiting for connection...</p>
         </div>
       </div>
@@ -265,14 +283,11 @@ export default function VerticalStreamClient({
       
       {/* Full screen video feed - Portrait aspect ratio */}
       <div className="relative h-screen">
-        <img
-          src="/api/camera/stream"
-          alt="Printer Camera Stream"
-          className="w-full h-full object-cover"
-          style={{ 
-            imageRendering: 'auto',
-            willChange: 'transform'
-          }}
+        <MultiCameraStream
+          className="w-full h-full"
+          displayMode={streamCameraDisplayMode}
+          enabledCameras={enabledCameras}
+          imageRendering="auto"
         />
 
         {/* Gradient overlays */}

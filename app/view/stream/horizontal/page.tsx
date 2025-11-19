@@ -32,6 +32,25 @@ export default async function HorizontalStreamPage() {
   const dashboardTitle = dashboardSettings?.dashboard_title ?? "s1pper's Dashboard"
   const dashboardSubtitle = dashboardSettings?.dashboard_subtitle ?? "A dashboard for s1pper, the Ender 3 S1 Pro"
 
+  // Extract horizontal-specific camera settings with fallback to global setting
+  const streamCameraDisplayMode = dashboardSettings?.horizontal_stream_camera_display_mode ?? 
+                                   dashboardSettings?.stream_camera_display_mode ?? 
+                                   'single'
+
+  // Fetch camera data
+  let enabledCameras: any[] = []
+  try {
+    const cameraResponse = await fetch(`http://localhost:${process.env.PORT || 3000}/api/camera/data`, {
+      cache: 'no-store'
+    })
+    if (cameraResponse.ok) {
+      const cameraData = await cameraResponse.json()
+      enabledCameras = (cameraData.webcams || []).filter((w: any) => w.database_enabled !== false)
+    }
+  } catch (error) {
+    console.error('Failed to fetch camera data:', error)
+  }
+
   return (
     <Suspense fallback={<ViewSkeleton />}>
       <StreamViewClient 
@@ -46,6 +65,8 @@ export default async function HorizontalStreamPage() {
         streamingTitleEnabled={streamingTitleEnabled}
         dashboardTitle={dashboardTitle}
         dashboardSubtitle={dashboardSubtitle}
+        streamCameraDisplayMode={streamCameraDisplayMode}
+        enabledCameras={enabledCameras}
       />
     </Suspense>
   )

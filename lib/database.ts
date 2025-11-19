@@ -143,6 +143,9 @@ export async function initializeDatabase(): Promise<void> {
         streaming_music_crossfade_duration NUMERIC(3,1) NOT NULL DEFAULT 3.0 CHECK (streaming_music_crossfade_duration >= 0 AND streaming_music_crossfade_duration <= 10),
         streaming_title_enabled BOOLEAN NOT NULL DEFAULT true,
         selected_camera_uid VARCHAR(255),
+        stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (stream_camera_display_mode IN ('single', 'grid', 'pip')),
+        horizontal_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (horizontal_stream_camera_display_mode IN ('single', 'grid', 'pip')),
+        vertical_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (vertical_stream_camera_display_mode IN ('single', 'grid', 'pip')),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
@@ -236,6 +239,9 @@ export interface DashboardSettings {
   streaming_music_crossfade_duration: number
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
+  stream_camera_display_mode: 'single' | 'grid' | 'pip'
+  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip'
+  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip'
   created_at: string
   updated_at: string
 }
@@ -262,8 +268,11 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       streaming_music_crossfade_duration: 3.0,
       streaming_title_enabled: true,
       selected_camera_uid: null,
+      stream_camera_display_mode: 'single',
+      horizontal_stream_camera_display_mode: 'single',
+      vertical_stream_camera_display_mode: 'single',
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     }
   }
 
@@ -321,7 +330,10 @@ export async function updateDashboardSettings(
   streaming_music_crossfade_enabled?: boolean,
   streaming_music_crossfade_duration?: number,
   streaming_title_enabled?: boolean,
-  selected_camera_uid?: string | null
+  selected_camera_uid?: string | null,
+  stream_camera_display_mode?: 'single' | 'grid' | 'pip',
+  horizontal_stream_camera_display_mode?: 'single' | 'grid' | 'pip',
+  vertical_stream_camera_display_mode?: 'single' | 'grid' | 'pip'
 ): Promise<DashboardSettings | null> {
   if (!isDatabaseAvailable()) {
     console.warn('Cannot update dashboard settings: database not available')
@@ -427,6 +439,24 @@ export async function updateDashboardSettings(
     if (selected_camera_uid !== undefined) {
       updateFields.push(`selected_camera_uid = $${paramCount}`)
       values.push(selected_camera_uid)
+      paramCount++
+    }
+
+    if (stream_camera_display_mode !== undefined) {
+      updateFields.push(`stream_camera_display_mode = $${paramCount}`)
+      values.push(stream_camera_display_mode)
+      paramCount++
+    }
+
+    if (horizontal_stream_camera_display_mode !== undefined) {
+      updateFields.push(`horizontal_stream_camera_display_mode = $${paramCount}`)
+      values.push(horizontal_stream_camera_display_mode)
+      paramCount++
+    }
+
+    if (vertical_stream_camera_display_mode !== undefined) {
+      updateFields.push(`vertical_stream_camera_display_mode = $${paramCount}`)
+      values.push(vertical_stream_camera_display_mode)
       paramCount++
     }
 

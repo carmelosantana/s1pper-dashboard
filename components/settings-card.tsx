@@ -44,6 +44,9 @@ interface DashboardSettings {
   streaming_music_crossfade_duration: number
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
+  stream_camera_display_mode: 'single' | 'grid' | 'pip'
+  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip'
+  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip'
 }
 
 interface WebcamConfig {
@@ -112,7 +115,10 @@ export default function SettingsCard() {
           streaming_music_playlist: data.streaming_music_playlist || [],
           streaming_music_crossfade_enabled: data.streaming_music_crossfade_enabled ?? false,
           streaming_music_crossfade_duration: data.streaming_music_crossfade_duration ?? 3.0,
-          streaming_title_enabled: data.streaming_title_enabled ?? true
+          streaming_title_enabled: data.streaming_title_enabled ?? true,
+          stream_camera_display_mode: data.stream_camera_display_mode || 'single',
+          horizontal_stream_camera_display_mode: data.horizontal_stream_camera_display_mode || 'single',
+          vertical_stream_camera_display_mode: data.vertical_stream_camera_display_mode || 'single'
         }
         setSettings(settingsWithDefaults)
         setOriginalSettings(settingsWithDefaults)
@@ -886,6 +892,203 @@ export default function SettingsCard() {
                   </div>
                 </div>
               )}
+
+              {/* Camera Management Section */}
+              <div className="border-t border-zinc-800 pt-4">
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Camera className="h-4 w-4" />
+                  Camera Management
+                </h3>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Control which cameras are displayed in stream views
+                </p>
+                
+                {webcams.length === 0 ? (
+                  <div className="text-sm text-muted-foreground p-4 bg-zinc-900 rounded-lg">
+                    No cameras detected. Please check your Moonraker configuration.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Camera Enable/Disable Toggles */}
+                    <div className="space-y-2">
+                      {webcams.map((webcam) => (
+                        <div
+                          key={webcam.uid}
+                          className="flex items-center justify-between p-3 rounded bg-zinc-900 hover:bg-zinc-800 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 flex-1">
+                            <Camera className="h-4 w-4 text-cyan-500" />
+                            <span className="text-sm">{webcam.name}</span>
+                          </div>
+                          <Switch
+                            checked={webcam.database_enabled}
+                            onCheckedChange={async (checked) => {
+                              try {
+                                const response = await fetch('/api/camera/settings', {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ uid: webcam.uid, enabled: checked })
+                                })
+                                if (response.ok) {
+                                  await loadWebcams()
+                                  toast.success(`${webcam.name} ${checked ? 'enabled' : 'disabled'}`)
+                                } else {
+                                  toast.error('Failed to update camera')
+                                }
+                              } catch (error) {
+                                toast.error('Failed to update camera')
+                              }
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Display Mode Selection - Only show when multiple cameras are enabled */}
+                    {webcams.filter(w => w.database_enabled).length > 1 && (
+                      <div className="space-y-6 pt-3 border-t border-zinc-800">
+                        {/* Global Display Mode */}
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <Label htmlFor="camera-display-mode">Global Camera Display Mode</Label>
+                            <p className="text-xs text-muted-foreground">
+                              Default display mode for all stream views (can be overridden per view)
+                            </p>
+                          </div>
+                          <Select
+                            value={settings.stream_camera_display_mode}
+                            onValueChange={(value: 'single' | 'grid' | 'pip') => 
+                              updateSettings({ stream_camera_display_mode: value })
+                            }
+                          >
+                            <SelectTrigger id="camera-display-mode">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="single">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">Single View</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Show one camera at a time with switcher
+                                  </span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="grid">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">Grid View</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Display all cameras in a grid layout
+                                  </span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="pip">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">Picture-in-Picture</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Main camera with smaller thumbnails
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Horizontal View Display Mode */}
+                        <div className="space-y-3 pt-3 border-t border-zinc-800">
+                          <div className="space-y-2">
+                            <Label htmlFor="horizontal-camera-display-mode">Horizontal Stream Display Mode</Label>
+                            <p className="text-xs text-muted-foreground">
+                              Display mode for /view/stream/horizontal (landscape orientation)
+                            </p>
+                          </div>
+                          <Select
+                            value={settings.horizontal_stream_camera_display_mode}
+                            onValueChange={(value: 'single' | 'grid' | 'pip') => 
+                              updateSettings({ horizontal_stream_camera_display_mode: value })
+                            }
+                          >
+                            <SelectTrigger id="horizontal-camera-display-mode">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="single">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">Single View</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Show one camera at a time with switcher
+                                  </span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="grid">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">Grid View</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Display all cameras in a grid layout
+                                  </span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="pip">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">Picture-in-Picture</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Main camera with smaller thumbnails
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Vertical View Display Mode */}
+                        <div className="space-y-3 pt-3 border-t border-zinc-800">
+                          <div className="space-y-2">
+                            <Label htmlFor="vertical-camera-display-mode">Vertical Stream Display Mode</Label>
+                            <p className="text-xs text-muted-foreground">
+                              Display mode for /view/stream/vertical (portrait orientation)
+                            </p>
+                          </div>
+                          <Select
+                            value={settings.vertical_stream_camera_display_mode}
+                            onValueChange={(value: 'single' | 'grid' | 'pip') => 
+                              updateSettings({ vertical_stream_camera_display_mode: value })
+                            }
+                          >
+                            <SelectTrigger id="vertical-camera-display-mode">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="single">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">Single View</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Show one camera at a time with switcher
+                                  </span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="grid">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">Grid View</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Display all cameras in a grid layout
+                                  </span>
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="pip">
+                                <div className="flex flex-col items-start">
+                                  <span className="font-medium">Picture-in-Picture</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    Main camera with smaller thumbnails
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </TabsContent>
         </Tabs>

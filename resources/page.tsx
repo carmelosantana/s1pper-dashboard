@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import VerticalStreamClient from "./vertical-stream-client"
+import StreamViewClient from "../app/view/stream/stream-view-client"
 import { getDashboardSettings } from "@/lib/database"
 import { fetchPrinterData } from "@/lib/fetch-printer-data"
 
@@ -9,13 +9,13 @@ function ViewSkeleton() {
     <div className="dark min-h-screen bg-black text-foreground flex items-center justify-center">
       <div className="text-center">
         <div className="w-16 h-16 mx-auto mb-4 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-muted-foreground">Loading vertical stream view...</p>
+        <p className="text-muted-foreground">Loading stream view...</p>
       </div>
     </div>
   )
 }
 
-export default async function VerticalStreamPage() {
+export default async function StreamPage() {
   const { status, temperatureHistory } = await fetchPrinterData()
   const dashboardSettings = await getDashboardSettings()
 
@@ -32,10 +32,8 @@ export default async function VerticalStreamPage() {
   const dashboardTitle = dashboardSettings?.dashboard_title ?? "s1pper's Dashboard"
   const dashboardSubtitle = dashboardSettings?.dashboard_subtitle ?? "A dashboard for s1pper, the Ender 3 S1 Pro"
 
-  // Extract vertical-specific camera settings with fallback to global setting
-  const streamCameraDisplayMode = dashboardSettings?.vertical_stream_camera_display_mode ?? 
-                                   dashboardSettings?.stream_camera_display_mode ?? 
-                                   'single'
+  // Extract camera settings with fallbacks
+  const streamCameraDisplayMode = dashboardSettings?.stream_camera_display_mode ?? 'single'
 
   // Fetch camera data
   let enabledCameras: any[] = []
@@ -53,7 +51,7 @@ export default async function VerticalStreamPage() {
 
   return (
     <Suspense fallback={<ViewSkeleton />}>
-      <VerticalStreamClient 
+      <StreamViewClient 
         initialStatus={status} 
         initialTemperatureHistory={temperatureHistory}
         musicEnabled={musicEnabled}

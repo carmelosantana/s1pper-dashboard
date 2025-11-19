@@ -77,6 +77,9 @@ export async function GET(request: NextRequest) {
       streaming_music_crossfade_duration: settings.streaming_music_crossfade_duration || 3.0,
       streaming_title_enabled: settings.streaming_title_enabled ?? true,
       selected_camera_uid: settings.selected_camera_uid,
+      stream_camera_display_mode: settings.stream_camera_display_mode || 'single',
+      horizontal_stream_camera_display_mode: settings.horizontal_stream_camera_display_mode || 'single',
+      vertical_stream_camera_display_mode: settings.vertical_stream_camera_display_mode || 'single',
       updated_at: settings.updated_at
     })
   } catch (error) {
@@ -123,7 +126,10 @@ export async function PUT(request: NextRequest) {
       streaming_music_crossfade_enabled,
       streaming_music_crossfade_duration,
       streaming_title_enabled,
-      selected_camera_uid
+      selected_camera_uid,
+      stream_camera_display_mode,
+      horizontal_stream_camera_display_mode,
+      vertical_stream_camera_display_mode
     } = body
 
     if (visibility_mode && !['offline', 'private', 'public'].includes(visibility_mode)) {
@@ -208,6 +214,27 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    if (stream_camera_display_mode && !['single', 'grid', 'pip'].includes(stream_camera_display_mode)) {
+      return NextResponse.json(
+        { error: 'Invalid stream_camera_display_mode. Must be single, grid, or pip' },
+        { status: 400 }
+      )
+    }
+
+    if (horizontal_stream_camera_display_mode && !['single', 'grid', 'pip'].includes(horizontal_stream_camera_display_mode)) {
+      return NextResponse.json(
+        { error: 'Invalid horizontal_stream_camera_display_mode. Must be single, grid, or pip' },
+        { status: 400 }
+      )
+    }
+
+    if (vertical_stream_camera_display_mode && !['single', 'grid', 'pip'].includes(vertical_stream_camera_display_mode)) {
+      return NextResponse.json(
+        { error: 'Invalid vertical_stream_camera_display_mode. Must be single, grid, or pip' },
+        { status: 400 }
+      )
+    }
+
     // Update settings
     const updatedSettings = await updateDashboardSettings(
       visibility_mode,
@@ -225,7 +252,10 @@ export async function PUT(request: NextRequest) {
       streaming_music_crossfade_enabled,
       streaming_music_crossfade_duration,
       streaming_title_enabled,
-      selected_camera_uid
+      selected_camera_uid,
+      stream_camera_display_mode,
+      horizontal_stream_camera_display_mode,
+      vertical_stream_camera_display_mode
     )
     
     if (!updatedSettings) {
@@ -252,6 +282,9 @@ export async function PUT(request: NextRequest) {
       streaming_music_crossfade_duration: updatedSettings.streaming_music_crossfade_duration || 3.0,
       streaming_title_enabled: updatedSettings.streaming_title_enabled ?? true,
       selected_camera_uid: updatedSettings.selected_camera_uid,
+      stream_camera_display_mode: updatedSettings.stream_camera_display_mode || 'single',
+      horizontal_stream_camera_display_mode: updatedSettings.horizontal_stream_camera_display_mode || 'single',
+      vertical_stream_camera_display_mode: updatedSettings.vertical_stream_camera_display_mode || 'single',
       updated_at: updatedSettings.updated_at
     })
 
