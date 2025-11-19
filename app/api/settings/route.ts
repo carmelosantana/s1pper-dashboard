@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getDashboardSettings, updateDashboardSettings, initializeDatabase, isDatabaseAvailable } from '@/lib/database'
 
-// Initialize database on startup
 let dbInitialized = false
 async function ensureDbInitialized() {
   if (!isDatabaseAvailable()) {
@@ -13,33 +12,22 @@ async function ensureDbInitialized() {
     dbInitialized = true
   }
 }
-
-// Security check for settings API - only allow same-origin or server-side requests
 function isAuthorizedRequest(request: NextRequest): boolean {
   const isDevelopment = process.env.NODE_ENV === 'development'
   
-  // Allow all requests in development
   if (isDevelopment) {
     return true
   }
   
-  // In production, allow requests from same origin or server-side
   const host = request.headers.get('host')
   const origin = request.headers.get('origin')
   const referer = request.headers.get('referer')
   
-  // Check if request is from localhost
   const isLocalhost = host?.includes('localhost') || host?.includes('127.0.0.1')
-  
-  // Check if request is from same origin (same domain)
   const isSameOrigin = origin ? origin === `https://${host}` || origin === `http://${host}` : false
-  
-  // Check if referer is from same domain (for cases where origin might not be set)
   const isSameReferer = referer ? (
     referer.startsWith(`https://${host}/`) || referer.startsWith(`http://${host}/`)
   ) : false
-  
-  // Server-side requests (no origin/referer) are allowed
   const isServerSide = !origin && !referer
   
   return isLocalhost || isSameOrigin || isSameReferer || isServerSide
@@ -48,27 +36,13 @@ function isAuthorizedRequest(request: NextRequest): boolean {
 export async function GET(request: NextRequest) {
   try {
     if (!isDatabaseAvailable()) {
-      // Return default settings when database is not available
       return NextResponse.json({
         visibility_mode: 'public',
         video_feed_enabled: true
       })
     }
 
-    // Debug logging for production issues
-    if (process.env.NODE_ENV === 'production') {
-      console.log('Settings API request headers:', {
-        host: request.headers.get('host'),
-        origin: request.headers.get('origin'),
-        referer: request.headers.get('referer'),
-        'x-forwarded-for': request.headers.get('x-forwarded-for'),
-        'x-real-ip': request.headers.get('x-real-ip'),
-      })
-    }
-    
-    // Security check
     if (!isAuthorizedRequest(request)) {
-      console.log('Settings API: Unauthorized request blocked')
       return NextResponse.json(
         { error: 'Unauthorized access' }, 
         { status: 403 }
@@ -99,6 +73,10 @@ export async function GET(request: NextRequest) {
       streaming_music_loop: settings.streaming_music_loop,
       streaming_music_playlist: settings.streaming_music_playlist || [],
       streaming_music_volume: settings.streaming_music_volume || 50,
+      streaming_music_crossfade_enabled: settings.streaming_music_crossfade_enabled || false,
+      streaming_music_crossfade_duration: settings.streaming_music_crossfade_duration || 3.0,
+      streaming_title_enabled: settings.streaming_title_enabled ?? true,
+      selected_camera_uid: settings.selected_camera_uid,
       updated_at: settings.updated_at
     })
   } catch (error) {
@@ -112,14 +90,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const dbAvailable = isDatabaseAvailable()
-    console.log('PUT /api/settings - Database check:', {
-      available: dbAvailable,
-      hasUrl: !!process.env.DATABASE_URL
-    })
-    
-    if (!dbAvailable) {
-      console.log('PUT /api/settings - Database not available, returning 503')
+    if (!isDatabaseAvailable()) {
       return NextResponse.json(
         { error: 'Settings cannot be updated - database not available' },
         { status: 503 }
@@ -127,12 +98,6 @@ export async function PUT(request: NextRequest) {
     }
 
     if (!isAuthorizedRequest(request)) {
-      console.warn('Unauthorized settings update attempt:', {
-        host: request.headers.get('host'),
-        origin: request.headers.get('origin'),
-        referer: request.headers.get('referer')
-      })
-      
       return NextResponse.json(
         { error: 'Unauthorized access' }, 
         { status: 403 }
@@ -154,10 +119,13 @@ export async function PUT(request: NextRequest) {
       streaming_music_enabled,
       streaming_music_loop,
       streaming_music_playlist,
-      streaming_music_volume
+      streaming_music_volume,
+      streaming_music_crossfade_enabled,
+      streaming_music_crossfade_duration,
+      streaming_title_enabled,
+      selected_camera_uid
     } = body
 
-    // Validate input
     if (visibility_mode && !['offline', 'private', 'public'].includes(visibility_mode)) {
       return NextResponse.json(
         { error: 'Invalid visibility_mode. Must be offline, private, or public' },
@@ -214,6 +182,32 @@ export async function PUT(request: NextRequest) {
       )
     }
 
+    if (streaming_music_crossfade_enabled !== undefined && typeof streaming_music_crossfade_enabled !== 'boolean') {
+      return NextResponse.json(
+        { error: 'Invalid streaming_music_crossfade_enabled. Must be a boolean' },
+        { status: 400 }
+      )
+    }
+
+    if (streaming_music_crossfade_duration !== undefined) {
+      const duration = Number(streaming_music_crossfade_duration)
+      if (isNaN(duration) || duration < 0 || duration > 10) {
+        return NextResponse.json(
+          { error: 'Invalid streaming_music_crossfade_duration. Must be a number between 0 and 10' },
+          { status: 400 }
+        )
+      }
+      // Round to 1 decimal place to match database precision
+      body.streaming_music_crossfade_duration = Math.round(duration * 10) / 10
+    }
+
+    if (streaming_title_enabled !== undefined && typeof streaming_title_enabled !== 'boolean') {
+      return NextResponse.json(
+        { error: 'Invalid streaming_title_enabled. Must be a boolean' },
+        { status: 400 }
+      )
+    }
+
     // Update settings
     const updatedSettings = await updateDashboardSettings(
       visibility_mode,
@@ -227,7 +221,11 @@ export async function PUT(request: NextRequest) {
       streaming_music_enabled,
       streaming_music_loop,
       streaming_music_playlist,
-      streaming_music_volume
+      streaming_music_volume,
+      streaming_music_crossfade_enabled,
+      streaming_music_crossfade_duration,
+      streaming_title_enabled,
+      selected_camera_uid
     )
     
     if (!updatedSettings) {
@@ -250,6 +248,10 @@ export async function PUT(request: NextRequest) {
       streaming_music_loop: updatedSettings.streaming_music_loop,
       streaming_music_playlist: updatedSettings.streaming_music_playlist || [],
       streaming_music_volume: updatedSettings.streaming_music_volume || 50,
+      streaming_music_crossfade_enabled: updatedSettings.streaming_music_crossfade_enabled || false,
+      streaming_music_crossfade_duration: updatedSettings.streaming_music_crossfade_duration || 3.0,
+      streaming_title_enabled: updatedSettings.streaming_title_enabled ?? true,
+      selected_camera_uid: updatedSettings.selected_camera_uid,
       updated_at: updatedSettings.updated_at
     })
 

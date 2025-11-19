@@ -20,11 +20,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { AlertCircle, Settings as SettingsIcon, Cpu, Layout, Radio, Upload, Trash2, Loader2, CheckCircle2, XCircle, Save, RotateCcw, Volume2 } from 'lucide-react'
+import { AlertCircle, Settings as SettingsIcon, Cpu, Layout, Radio, Upload, Trash2, Loader2, CheckCircle2, XCircle, Save, RotateCcw, Volume2, Camera } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Slider } from '@/components/ui/slider'
 import { isDevelopment } from '@/lib/utils/environment'
 import { toast } from 'sonner'
+import { trackEvent } from '@/components/umami-analytics'
 
 interface DashboardSettings {
   visibility_mode: 'offline' | 'private' | 'public'
@@ -39,6 +40,17 @@ interface DashboardSettings {
   streaming_music_loop: boolean
   streaming_music_volume: number
   streaming_music_playlist: string[]
+  streaming_music_crossfade_enabled: boolean
+  streaming_music_crossfade_duration: number
+  streaming_title_enabled: boolean
+  selected_camera_uid: string | null
+}
+
+interface WebcamConfig {
+  uid: string
+  name: string
+  enabled: boolean
+  database_enabled: boolean
 }
 
 interface MusicFile {
@@ -50,6 +62,7 @@ export default function SettingsCard() {
   const [settings, setSettings] = useState<DashboardSettings | null>(null)
   const [originalSettings, setOriginalSettings] = useState<DashboardSettings | null>(null)
   const [musicFiles, setMusicFiles] = useState<MusicFile[]>([])
+  const [webcams, setWebcams] = useState<WebcamConfig[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -61,6 +74,7 @@ export default function SettingsCard() {
   useEffect(() => {
     loadSettings()
     loadMusicFiles()
+    loadWebcams()
     checkPrinterStatus()
   }, [])
 
@@ -93,12 +107,15 @@ export default function SettingsCard() {
       const response = await fetch('/api/settings')
       if (response.ok) {
         const data = await response.json()
-        const settingsWithPlaylist = {
+        const settingsWithDefaults = {
           ...data,
-          streaming_music_playlist: data.streaming_music_playlist || []
+          streaming_music_playlist: data.streaming_music_playlist || [],
+          streaming_music_crossfade_enabled: data.streaming_music_crossfade_enabled ?? false,
+          streaming_music_crossfade_duration: data.streaming_music_crossfade_duration ?? 3.0,
+          streaming_title_enabled: data.streaming_title_enabled ?? true
         }
-        setSettings(settingsWithPlaylist)
-        setOriginalSettings(settingsWithPlaylist)
+        setSettings(settingsWithDefaults)
+        setOriginalSettings(settingsWithDefaults)
       }
     } catch (error) {
       console.error('Error loading settings:', error)
@@ -117,6 +134,18 @@ export default function SettingsCard() {
       }
     } catch (error) {
       console.error('Error loading music files:', error)
+    }
+  }
+
+  const loadWebcams = async () => {
+    try {
+      const response = await fetch('/api/camera/webcams')
+      if (response.ok) {
+        const data = await response.json()
+        setWebcams(data.webcams || [])
+      }
+    } catch (error) {
+      console.error('Error loading webcams:', error)
     }
   }
 
@@ -160,6 +189,14 @@ export default function SettingsCard() {
         setOriginalSettings(settingsWithPlaylist)
         setHasUnsavedChanges(false)
         toast.success('Settings saved successfully')
+        
+        // Track settings save event
+        trackEvent('settings_saved', {
+          video_feed_enabled: settings.video_feed_enabled,
+          visibility_mode: settings.visibility_mode,
+          guestbook_enabled: settings.guestbook_enabled,
+          streaming_music_enabled: settings.streaming_music_enabled
+        })
       } else {
         toast.error('Failed to save settings')
       }
@@ -202,6 +239,30 @@ export default function SettingsCard() {
     } catch (error) {
       console.error(`Error restarting ${name}:`, error)
       toast.error(`Failed to restart ${name}`)
+    }
+  }
+
+  const handleCameraToggle = async (uid: string, enabled: boolean) => {
+    try {
+      const response = await fetch('/api/camera/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid, enabled })
+      })
+      
+      if (response.ok) {
+        toast.success(`Camera ${enabled ? 'enabled' : 'disabled'}`)
+        // Update local state
+        setWebcams(prev => prev.map(cam => 
+          cam.uid === uid ? { ...cam, database_enabled: enabled } : cam
+        ))
+      } else {
+        const data = await response.json()
+        toast.error(data.error || 'Failed to update camera')
+      }
+    } catch (error) {
+      console.error('Error updating camera:', error)
+      toast.error('Failed to update camera')
     }
   }
 
@@ -358,10 +419,14 @@ export default function SettingsCard() {
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="printer" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="printer">
               <Cpu className="h-4 w-4 mr-2" />
               Printer
+            </TabsTrigger>
+            <TabsTrigger value="cameras">
+              <Camera className="h-4 w-4 mr-2" />
+              Cameras
             </TabsTrigger>
             <TabsTrigger value="dashboard">
               <Layout className="h-4 w-4 mr-2" />
@@ -496,6 +561,46 @@ export default function SettingsCard() {
             </div>
           </TabsContent>
 
+          {/* Cameras Tab */}
+          <TabsContent value="cameras" className="space-y-4">
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold mb-3">Camera Management</h3>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Enable or disable cameras. Disabled cameras will not appear in the camera selector.
+                </p>
+                {webcams.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Camera className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No cameras detected</p>
+                    <p className="text-xs mt-1">Connect cameras to your printer to see them here</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {webcams.map((webcam) => (
+                      <div 
+                        key={webcam.uid}
+                        className="flex items-center justify-between p-3 rounded-md border border-zinc-800 bg-zinc-900/50"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Camera className="h-5 w-5 text-cyan-500" />
+                          <div>
+                            <p className="text-sm font-medium">{webcam.name}</p>
+                            <p className="text-xs text-muted-foreground">UID: {webcam.uid}</p>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={webcam.database_enabled}
+                          onCheckedChange={(enabled) => handleCameraToggle(webcam.uid, enabled)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="space-y-4">
             <div className="space-y-4">
@@ -593,6 +698,29 @@ export default function SettingsCard() {
           <TabsContent value="streaming" className="space-y-4">
             <div className="space-y-4">
               <div>
+                <h3 className="text-sm font-semibold mb-3">Stream Display Settings</h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="stream-title-enabled">
+                        {settings.streaming_title_enabled ? 'Hide Stream Title' : 'Show Stream Title'}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {settings.streaming_title_enabled 
+                          ? 'Title and subtitle are visible on stream views' 
+                          : 'Title and subtitle are hidden on stream views'}
+                      </p>
+                    </div>
+                    <Switch
+                      id="stream-title-enabled"
+                      checked={settings.streaming_title_enabled}
+                      onCheckedChange={(checked) => updateSettings({ streaming_title_enabled: checked })}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-zinc-800 pt-4">
                 <h3 className="text-sm font-semibold mb-3">Music Settings</h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -639,6 +767,38 @@ export default function SettingsCard() {
                           className="w-full"
                         />
                       </div>
+
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="crossfade-enabled">Enable Crossfade</Label>
+                          <p className="text-xs text-muted-foreground">Smooth transitions between songs</p>
+                        </div>
+                        <Switch
+                          id="crossfade-enabled"
+                          checked={settings.streaming_music_crossfade_enabled}
+                          onCheckedChange={(checked) => updateSettings({ streaming_music_crossfade_enabled: checked })}
+                        />
+                      </div>
+
+                      {settings.streaming_music_crossfade_enabled && (
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="crossfade-duration">
+                              Crossfade Duration
+                            </Label>
+                            <span className="text-sm text-muted-foreground">{Number(settings.streaming_music_crossfade_duration).toFixed(1)}s</span>
+                          </div>
+                          <Slider
+                            id="crossfade-duration"
+                            min={0}
+                            max={10}
+                            step={0.1}
+                            value={[Number(settings.streaming_music_crossfade_duration)]}
+                            onValueChange={(value: number[]) => updateSettings({ streaming_music_crossfade_duration: value[0] })}
+                            className="w-full"
+                          />
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

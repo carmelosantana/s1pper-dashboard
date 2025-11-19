@@ -6,9 +6,10 @@ A fun, real-time dashboard for monitoring your Klipper/Moonraker 3D printer. Fea
 
 ## Features
 
-- **Real-time Print Monitoring**: Live status updates, progress tracking, and time estimates
+- **Real-Time WebSocket Updates**: Instant printer status updates via WebSocket connection (no polling lag)
+- **Live Print Monitoring**: Real-time status updates, progress tracking, and time estimates
 - **Camera Feed**: Live streaming and snapshot capture with privacy controls
-- **Temperature Monitoring**: Real-time temperature charts for extruder and bed
+- **Temperature Monitoring**: Real-time temperature charts for extruder and bed with target tracking
 - **Lifetime Statistics**: Track total print time, filament usage, and completed prints
 - **Multiple View Modes**: Default dashboard, horizontal stream, and vertical stream layouts
 - **Visitor Guestbook**: Optional database-powered guestbook for visitors (PostgreSQL)
@@ -53,11 +54,15 @@ Edit `.env` with your printer's IP address and secure password:
 ```env
 PRINTER_HOST=192.168.1.123
 MOONRAKER_PORT=7127
+NEXT_PUBLIC_PRINTER_HOST=192.168.1.123
+NEXT_PUBLIC_MOONRAKER_PORT=7127
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Set a secure password!
 POSTGRES_PASSWORD=your_secure_password_here
 ```
+
+**Note:** Set both `PRINTER_HOST` (for server-side API calls) and `NEXT_PUBLIC_PRINTER_HOST` (for client-side WebSocket connections) to your printer's IP address.
 
 3. **Deploy with Docker**
 
@@ -148,6 +153,37 @@ make docker-clean  # or: pnpm docker:clean
 
 Then start fresh with `make docker-up`.
 
+**WebSocket connection issues:**
+
+If the dashboard shows "Printer Offline" despite the printer being reachable:
+
+1. Check Moonraker's CORS configuration in `~/printer_data/config/moonraker.conf`:
+
+```conf
+[authorization]
+trusted_clients:
+  0.0.0.0/0
+cors_domains:
+  *
+force_logins: False
+```
+
+2. Restart Moonraker after config changes:
+
+```bash
+sudo systemctl restart moonraker
+```
+
+3. Verify WebSocket endpoint is accessible:
+
+```bash
+curl -I http://YOUR_PRINTER_IP:7127/websocket
+```
+
+Should return `405 Method Not Allowed` (this is correct for WebSocket endpoints).
+
+4. Check browser console for WebSocket connection errors and ensure `NEXT_PUBLIC_PRINTER_HOST` is set correctly.
+
 ### Local Development
 
 1. **Clone and Install**
@@ -186,11 +222,13 @@ Open [http://localhost:3000](http://localhost:3000) in your browser
 
 ### Required Variables
 
-| Variable              | Description                   | Default                 |
-| --------------------- | ----------------------------- | ----------------------- |
-| `PRINTER_HOST`        | Your printer's IP address     | `192.168.1.123`         |
-| `MOONRAKER_PORT`      | Moonraker API port            | `7127`                  |
-| `NEXT_PUBLIC_APP_URL` | Application URL for API calls | `http://localhost:3000` |
+| Variable                       | Description                              | Default                 |
+| ------------------------------ | ---------------------------------------- | ----------------------- |
+| `PRINTER_HOST`                 | Your printer's IP address                | `192.168.1.123`         |
+| `MOONRAKER_PORT`               | Moonraker API port                       | `7127`                  |
+| `NEXT_PUBLIC_APP_URL`          | Application URL for API calls            | `http://localhost:3000` |
+| `NEXT_PUBLIC_PRINTER_HOST`     | Printer IP for WebSocket (client-side)   | Same as `PRINTER_HOST`  |
+| `NEXT_PUBLIC_MOONRAKER_PORT`   | Moonraker port for WebSocket             | Same as `MOONRAKER_PORT`|
 
 ### Optional Database Features
 
@@ -353,14 +391,16 @@ All views respect dashboard visibility settings:
 
 ### Technical Implementation
 
+- **WebSocket Connection:** Real-time updates via Moonraker's WebSocket API (no polling lag)
+- **Deep State Merging:** Preserves target temperatures and power states during incremental updates
 - **Server-Side Rendering:** Initial data fetched on server via Next.js App Router
-- **Client Updates:** Real-time updates via client components
+- **Client Updates:** Event-driven real-time updates via WebSocket subscriptions
 - **Data Security:** No sensitive information exposed to client
 - **Camera Updates:**
   - Continuous stream when printing
   - Background snapshots every 30 seconds when idle
-- **Routing:** Dynamic routes via `/view/[theme]/page.tsx`
-- **Error Handling:** Invalid themes return 404
+- **Routing:** Stream views via `/view/stream/horizontal` and `/view/stream/vertical`
+- **Automatic Reconnection:** WebSocket client handles connection drops with exponential backoff
 
 ## API Endpoints
 

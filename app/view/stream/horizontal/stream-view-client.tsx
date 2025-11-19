@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Activity, Thermometer } from 'lucide-react'
 import { FaviconManager } from '@/components/favicon-manager'
 import { StreamMusicPlayer } from '@/components/stream-music-player'
+import { usePrinterData } from '@/lib/hooks/use-printer-data'
 import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
 
 interface StreamViewClientProps {
@@ -14,6 +15,11 @@ interface StreamViewClientProps {
   musicVolume: number
   musicPlaylist: string[]
   musicLoop: boolean
+  musicCrossfadeEnabled: boolean
+  musicCrossfadeDuration: number
+  streamingTitleEnabled: boolean
+  dashboardTitle: string
+  dashboardSubtitle: string
 }
 
 function formatTime(seconds: number): string {
@@ -54,11 +60,14 @@ export default function StreamViewClient({
   musicEnabled,
   musicVolume,
   musicPlaylist,
-  musicLoop
+  musicLoop,
+  musicCrossfadeEnabled,
+  musicCrossfadeDuration,
+  streamingTitleEnabled,
+  dashboardTitle,
+  dashboardSubtitle
 }: StreamViewClientProps) {
-  const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(initialStatus)
-  const [temperatureHistory, setTemperatureHistory] = useState<TemperatureHistory | null>(initialTemperatureHistory)
-  const [streamUrl, setStreamUrl] = useState<string>('/api/camera/stream')
+  const { printerStatus, temperatureHistory, isConnected } = usePrinterData()
   const [currentTime, setCurrentTime] = useState<Date>(new Date())
 
   // Update current time every second
@@ -69,45 +78,7 @@ export default function StreamViewClient({
     return () => clearInterval(timer)
   }, [])
 
-  // Fetch fresh data every 3 seconds
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [statusResponse, tempResponse] = await Promise.all([
-          fetch('/api/printer/status', { cache: 'no-store' }),
-          fetch('/api/printer/temperature-history', { cache: 'no-store' })
-        ])
-
-        if (statusResponse.ok) {
-          const status = await statusResponse.json()
-          setPrinterStatus(status)
-        }
-
-        if (tempResponse.ok) {
-          const tempHistory = await tempResponse.json()
-          setTemperatureHistory(tempHistory)
-        }
-
-        // Add cache busting to video stream
-        setStreamUrl(`/api/camera/stream?t=${Date.now()}`)
-      } catch (error) {
-        console.error('Error fetching printer data:', error)
-      }
-    }
-
-    // Initial fetch after component mounts
-    const initialDelay = setTimeout(fetchData, 1000)
-    
-    // Then fetch every 3 seconds
-    const interval = setInterval(fetchData, 3000)
-
-    return () => {
-      clearTimeout(initialDelay)
-      clearInterval(interval)
-    }
-  }, [])
-
-  if (!printerStatus || printerStatus.print.state === 'offline') {
+  if (!isConnected || !printerStatus || printerStatus.print.state === 'offline') {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <FaviconManager status="offline" />
@@ -133,15 +104,26 @@ export default function StreamViewClient({
         volume={musicVolume}
         playlist={musicPlaylist}
         loop={musicLoop}
+        crossfadeEnabled={musicCrossfadeEnabled}
+        crossfadeDuration={musicCrossfadeDuration}
       />
       
       {/* Full screen video feed */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0 bg-black">
         <img
-          src={streamUrl}
+          src="/api/camera/stream"
           alt="Printer Camera Stream"
           className="w-full h-full object-cover"
-          style={{ imageRendering: 'crisp-edges' }}
+          style={{ 
+            imageRendering: 'auto',
+            willChange: 'transform',
+          }}
+          onError={(e) => {
+            console.error('Stream error:', e)
+          }}
+          onLoad={() => {
+            console.log('Stream loaded successfully')
+          }}
         />
       </div>
 
@@ -153,13 +135,15 @@ export default function StreamViewClient({
 
       {/* Top Left: Printer Status */}
       <div className="absolute top-6 left-6 space-y-3">
-        <div className="flex items-center gap-3">
-          <Activity className="h-8 w-8 text-cyan-500" />
-          <div>
-            <h1 className="text-2xl font-bold text-white">s1pper</h1>
-            <p className="text-sm text-gray-300">Ender 3 S1 Pro</p>
+        {streamingTitleEnabled && (
+          <div className="flex items-center gap-3">
+            <Activity className="h-8 w-8 text-cyan-500" />
+            <div>
+              <h1 className="text-2xl font-bold text-white">{dashboardTitle}</h1>
+              <p className="text-sm text-gray-300">{dashboardSubtitle}</p>
+            </div>
           </div>
-        </div>
+        )}
         
         <Badge
           className={
@@ -266,7 +250,7 @@ export default function StreamViewClient({
               / {Math.round(printerStatus.temperatures.extruder.target)}°C
             </span>
           </div>
-          {printerStatus.temperatures.extruder.power > 0 && (
+          {(printerStatus.temperatures.extruder.target > 0 || printerStatus.temperatures.extruder.power > 0) && (
             <div className="mt-2">
               <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
                 <div
@@ -295,7 +279,7 @@ export default function StreamViewClient({
               / {Math.round(printerStatus.temperatures.bed.target)}°C
             </span>
           </div>
-          {printerStatus.temperatures.bed.power > 0 && (
+          {(printerStatus.temperatures.bed.target > 0 || printerStatus.temperatures.bed.power > 0) && (
             <div className="mt-2">
               <div className="w-full bg-gray-800 rounded-full h-1.5 overflow-hidden">
                 <div
