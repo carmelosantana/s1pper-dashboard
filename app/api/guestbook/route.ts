@@ -11,7 +11,6 @@ import {
 } from '@/lib/guestbook'
 import type { PrinterStatus } from '@/lib/types'
 
-// Initialize database on first request
 let dbInitialized = false
 
 async function ensureDbInitialized() {

@@ -9,8 +9,6 @@ if (!KLIPPER_HOST) {
 }
 
 const KLIPPER_BASE_URL = KLIPPER_HOST ? `http://${KLIPPER_HOST}:${KLIPPER_PORT}` : null
-
-// Cache for 5 seconds since temperature history doesn't need to be as real-time
 const CACHE_DURATION = 5000
 let lastFetch = 0
 let cachedData: TemperatureHistory | null = null

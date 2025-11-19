@@ -24,6 +24,13 @@ export default async function VerticalStreamPage() {
   const musicVolume = dashboardSettings?.streaming_music_volume ?? 50
   const musicPlaylist = dashboardSettings?.streaming_music_playlist ?? []
   const musicLoop = dashboardSettings?.streaming_music_loop ?? false
+  const musicCrossfadeEnabled = dashboardSettings?.streaming_music_crossfade_enabled ?? false
+  const musicCrossfadeDuration = dashboardSettings?.streaming_music_crossfade_duration ?? 3.0
+
+  // Extract title/subtitle settings with fallbacks
+  const streamingTitleEnabled = dashboardSettings?.streaming_title_enabled ?? true
+  const dashboardTitle = dashboardSettings?.dashboard_title ?? "s1pper's Dashboard"
+  const dashboardSubtitle = dashboardSettings?.dashboard_subtitle ?? "A dashboard for s1pper, the Ender 3 S1 Pro"
 
   return (
     <Suspense fallback={<ViewSkeleton />}>
@@ -34,6 +41,11 @@ export default async function VerticalStreamPage() {
         musicVolume={musicVolume}
         musicPlaylist={musicPlaylist}
         musicLoop={musicLoop}
+        musicCrossfadeEnabled={musicCrossfadeEnabled}
+        musicCrossfadeDuration={musicCrossfadeDuration}
+        streamingTitleEnabled={streamingTitleEnabled}
+        dashboardTitle={dashboardTitle}
+        dashboardSubtitle={dashboardSubtitle}
       />
     </Suspense>
   )

@@ -9,8 +9,6 @@ if (!KLIPPER_HOST) {
 }
 
 const KLIPPER_BASE_URL = KLIPPER_HOST ? `http://${KLIPPER_HOST}:${KLIPPER_PORT}` : null
-
-// Cache for 30 seconds - lifetime stats don't change frequently
 const CACHE_DURATION = 30000
 let lastFetch = 0
 let cachedData: LifetimeStats | null = null
