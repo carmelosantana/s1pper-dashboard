@@ -179,6 +179,43 @@ export async function initializeDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_camera_settings_uid ON camera_settings(uid);
       CREATE INDEX IF NOT EXISTS idx_camera_settings_enabled ON camera_settings(enabled);
       CREATE INDEX IF NOT EXISTS idx_camera_settings_order ON camera_settings(display_order);
+
+      -- Per-view camera settings
+      CREATE TABLE IF NOT EXISTS view_camera_settings (
+        id SERIAL PRIMARY KEY,
+        view_name VARCHAR(50) NOT NULL CHECK (view_name IN ('stream', 'horizontal', 'vertical')),
+        camera_uid VARCHAR(255) NOT NULL,
+        enabled BOOLEAN NOT NULL DEFAULT true,
+        display_order INTEGER DEFAULT 0,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(view_name, camera_uid)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_view_camera_view_name ON view_camera_settings(view_name);
+      CREATE INDEX IF NOT EXISTS idx_view_camera_uid ON view_camera_settings(camera_uid);
+      CREATE INDEX IF NOT EXISTS idx_view_camera_enabled ON view_camera_settings(enabled);
+      CREATE INDEX IF NOT EXISTS idx_view_camera_order ON view_camera_settings(display_order);
+
+      -- Add pip main camera fields to dashboard_settings if they don't exist
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                      WHERE table_name='dashboard_settings' 
+                      AND column_name='stream_pip_main_camera_uid') THEN
+          ALTER TABLE dashboard_settings ADD COLUMN stream_pip_main_camera_uid VARCHAR(255);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                      WHERE table_name='dashboard_settings' 
+                      AND column_name='horizontal_pip_main_camera_uid') THEN
+          ALTER TABLE dashboard_settings ADD COLUMN horizontal_pip_main_camera_uid VARCHAR(255);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                      WHERE table_name='dashboard_settings' 
+                      AND column_name='vertical_pip_main_camera_uid') THEN
+          ALTER TABLE dashboard_settings ADD COLUMN vertical_pip_main_camera_uid VARCHAR(255);
+        END IF;
+      END $$;
     `
 
     try {
@@ -242,6 +279,20 @@ export interface DashboardSettings {
   stream_camera_display_mode: 'single' | 'grid' | 'pip'
   horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip'
   vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip'
+  stream_pip_main_camera_uid: string | null
+  horizontal_pip_main_camera_uid: string | null
+  vertical_pip_main_camera_uid: string | null
+  created_at: string
+  updated_at: string
+}
+
+// View camera settings
+export interface ViewCameraSettings {
+  id: number
+  view_name: 'stream' | 'horizontal' | 'vertical'
+  camera_uid: string
+  enabled: boolean
+  display_order: number
   created_at: string
   updated_at: string
 }
@@ -333,7 +384,10 @@ export async function updateDashboardSettings(
   selected_camera_uid?: string | null,
   stream_camera_display_mode?: 'single' | 'grid' | 'pip',
   horizontal_stream_camera_display_mode?: 'single' | 'grid' | 'pip',
-  vertical_stream_camera_display_mode?: 'single' | 'grid' | 'pip'
+  vertical_stream_camera_display_mode?: 'single' | 'grid' | 'pip',
+  stream_pip_main_camera_uid?: string | null,
+  horizontal_pip_main_camera_uid?: string | null,
+  vertical_pip_main_camera_uid?: string | null
 ): Promise<DashboardSettings | null> {
   if (!isDatabaseAvailable()) {
     console.warn('Cannot update dashboard settings: database not available')
@@ -460,6 +514,24 @@ export async function updateDashboardSettings(
       paramCount++
     }
 
+    if (stream_pip_main_camera_uid !== undefined) {
+      updateFields.push(`stream_pip_main_camera_uid = $${paramCount}`)
+      values.push(stream_pip_main_camera_uid)
+      paramCount++
+    }
+
+    if (horizontal_pip_main_camera_uid !== undefined) {
+      updateFields.push(`horizontal_pip_main_camera_uid = $${paramCount}`)
+      values.push(horizontal_pip_main_camera_uid)
+      paramCount++
+    }
+
+    if (vertical_pip_main_camera_uid !== undefined) {
+      updateFields.push(`vertical_pip_main_camera_uid = $${paramCount}`)
+      values.push(vertical_pip_main_camera_uid)
+      paramCount++
+    }
+
     if (updateFields.length === 0) {
       // No updates requested, return current settings
       return await getDashboardSettings()
@@ -566,6 +638,103 @@ export async function updateCameraDisplayOrder(uid: string, display_order: numbe
     return results[0] || null
   } catch (error) {
     console.error('Error updating camera display order:', error)
+    return null
+  }
+}
+
+// View camera settings functions
+export async function getViewCameraSettings(viewName: 'stream' | 'horizontal' | 'vertical'): Promise<ViewCameraSettings[]> {
+  if (!isDatabaseAvailable()) {
+    return []
+  }
+
+  try {
+    const results = await query<ViewCameraSettings>(
+      'SELECT * FROM view_camera_settings WHERE view_name = $1 ORDER BY display_order, camera_uid',
+      [viewName]
+    )
+    return results
+  } catch (error) {
+    console.error('Error fetching view camera settings:', error)
+    return []
+  }
+}
+
+export async function getViewCameraSettingByUid(viewName: 'stream' | 'horizontal' | 'vertical', cameraUid: string): Promise<ViewCameraSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const results = await query<ViewCameraSettings>(
+      'SELECT * FROM view_camera_settings WHERE view_name = $1 AND camera_uid = $2',
+      [viewName, cameraUid]
+    )
+    return results[0] || null
+  } catch (error) {
+    console.error('Error fetching view camera setting:', error)
+    return null
+  }
+}
+
+export async function upsertViewCameraSettings(viewName: 'stream' | 'horizontal' | 'vertical', cameras: Array<{ uid: string; enabled?: boolean; display_order?: number }>): Promise<void> {
+  if (!isDatabaseAvailable()) {
+    return
+  }
+
+  try {
+    for (const camera of cameras) {
+      await query(
+        `INSERT INTO view_camera_settings (view_name, camera_uid, enabled, display_order) 
+         VALUES ($1, $2, $3, $4) 
+         ON CONFLICT (view_name, camera_uid) 
+         DO UPDATE SET enabled = $3, display_order = $4, updated_at = CURRENT_TIMESTAMP`,
+        [viewName, camera.uid, camera.enabled ?? true, camera.display_order ?? 0]
+      )
+    }
+  } catch (error) {
+    console.error('Error upserting view camera settings:', error)
+  }
+}
+
+export async function updateViewCameraEnabled(viewName: 'stream' | 'horizontal' | 'vertical', cameraUid: string, enabled: boolean): Promise<ViewCameraSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const results = await query<ViewCameraSettings>(
+      `INSERT INTO view_camera_settings (view_name, camera_uid, enabled) 
+       VALUES ($1, $2, $3)
+       ON CONFLICT (view_name, camera_uid)
+       DO UPDATE SET enabled = $3, updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [viewName, cameraUid, enabled]
+    )
+    return results[0] || null
+  } catch (error) {
+    console.error('Error updating view camera enabled state:', error)
+    return null
+  }
+}
+
+export async function updateViewCameraDisplayOrder(viewName: 'stream' | 'horizontal' | 'vertical', cameraUid: string, display_order: number): Promise<ViewCameraSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const results = await query<ViewCameraSettings>(
+      `INSERT INTO view_camera_settings (view_name, camera_uid, display_order) 
+       VALUES ($1, $2, $3)
+       ON CONFLICT (view_name, camera_uid)
+       DO UPDATE SET display_order = $3, updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [viewName, cameraUid, display_order]
+    )
+    return results[0] || null
+  } catch (error) {
+    console.error('Error updating view camera display order:', error)
     return null
   }
 }

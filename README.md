@@ -8,6 +8,11 @@ A fun, real-time dashboard for monitoring your Klipper/Moonraker 3D printer. Fea
 
 - **Real-Time WebSocket Updates**: Instant printer status updates via WebSocket connection (no polling lag)
 - **Live Print Monitoring**: Real-time status updates, progress tracking, and time estimates
+- **Multi-Camera Support**: Support for multiple cameras with flexible display modes
+  - **Per-View Camera Configuration**: Each stream view (horizontal/vertical) can have different cameras enabled
+  - **Display Modes**: Single camera, grid layout, or picture-in-picture (PIP) mode
+  - **PIP Main Camera Selection**: Choose which camera appears as the main view in PIP mode
+  - **Independent View Settings**: Configure display mode and cameras separately for each view
 - **Camera Feed**: Live streaming and snapshot capture with privacy controls
 - **Temperature Monitoring**: Real-time temperature charts for extruder and bed with target tracking
 - **Lifetime Statistics**: Track total print time, filament usage, and completed prints
@@ -388,6 +393,59 @@ All views respect dashboard visibility settings:
 - **Offline mode:** Shows offline message
 - **Private mode:** Redacts filenames and disables video
 - **Public mode:** Shows all information
+
+### Camera Management
+
+The dashboard supports multiple cameras with flexible per-view configuration.
+
+#### Global Camera Settings
+
+Control which cameras are available across the entire dashboard:
+
+1. Navigate to Settings → Streaming tab (development mode only)
+2. Under "Global Camera Availability", enable/disable cameras globally
+3. Disabled cameras won't appear in any view
+
+#### Per-View Camera Configuration
+
+Each stream view (horizontal and vertical) can have independent camera settings:
+
+**Display Modes:**
+- **Single View:** Show one camera at a time with a switcher
+- **Grid View:** Display all enabled cameras in a grid layout
+- **Picture-in-Picture (PIP):** Main camera with smaller thumbnails
+
+**Per-View Camera Selection:**
+- Enable/disable specific cameras for each view independently
+- A camera enabled globally can be hidden in specific views
+- Useful for showing different angles in different streaming contexts
+
+**Example Configuration:**
+- Horizontal view: Show only the wide-angle camera in single mode
+- Vertical view: Show both cameras in grid mode
+- Each view maintains its own display mode and camera selection
+
+#### PIP Main Camera Selection
+
+When using Picture-in-Picture mode with multiple cameras:
+
+1. Select display mode "Picture-in-Picture" for the view
+2. Enable at least 2 cameras for that view
+3. Choose which camera appears as the main view
+4. Other cameras appear as smaller thumbnails
+5. Default: First enabled camera is used as main
+
+**API Endpoints:**
+- `GET /api/view-camera/settings?view={stream|horizontal|vertical}` - Get view camera settings
+- `PUT /api/view-camera/settings` - Update camera enabled state for a view
+- `PUT /api/settings` - Update display mode and PIP main camera
+
+#### Database Tables
+
+Camera settings are persisted in PostgreSQL:
+- `camera_settings` - Global camera enable/disable
+- `view_camera_settings` - Per-view camera configuration
+- `dashboard_settings` - Display modes and PIP main camera selection
 
 ### Technical Implementation
 

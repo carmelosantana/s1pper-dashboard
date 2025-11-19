@@ -288,6 +288,8 @@ export default function VerticalStreamClient({
           displayMode={streamCameraDisplayMode}
           enabledCameras={enabledCameras}
           imageRendering="auto"
+          orientation="vertical"
+          disableInteraction={true}
         />
 
         {/* Gradient overlays */}

@@ -80,6 +80,9 @@ export async function GET(request: NextRequest) {
       stream_camera_display_mode: settings.stream_camera_display_mode || 'single',
       horizontal_stream_camera_display_mode: settings.horizontal_stream_camera_display_mode || 'single',
       vertical_stream_camera_display_mode: settings.vertical_stream_camera_display_mode || 'single',
+      stream_pip_main_camera_uid: settings.stream_pip_main_camera_uid || null,
+      horizontal_pip_main_camera_uid: settings.horizontal_pip_main_camera_uid || null,
+      vertical_pip_main_camera_uid: settings.vertical_pip_main_camera_uid || null,
       updated_at: settings.updated_at
     })
   } catch (error) {
@@ -129,7 +132,10 @@ export async function PUT(request: NextRequest) {
       selected_camera_uid,
       stream_camera_display_mode,
       horizontal_stream_camera_display_mode,
-      vertical_stream_camera_display_mode
+      vertical_stream_camera_display_mode,
+      stream_pip_main_camera_uid,
+      horizontal_pip_main_camera_uid,
+      vertical_pip_main_camera_uid
     } = body
 
     if (visibility_mode && !['offline', 'private', 'public'].includes(visibility_mode)) {
@@ -255,7 +261,10 @@ export async function PUT(request: NextRequest) {
       selected_camera_uid,
       stream_camera_display_mode,
       horizontal_stream_camera_display_mode,
-      vertical_stream_camera_display_mode
+      vertical_stream_camera_display_mode,
+      stream_pip_main_camera_uid,
+      horizontal_pip_main_camera_uid,
+      vertical_pip_main_camera_uid
     )
     
     if (!updatedSettings) {
@@ -285,6 +294,9 @@ export async function PUT(request: NextRequest) {
       stream_camera_display_mode: updatedSettings.stream_camera_display_mode || 'single',
       horizontal_stream_camera_display_mode: updatedSettings.horizontal_stream_camera_display_mode || 'single',
       vertical_stream_camera_display_mode: updatedSettings.vertical_stream_camera_display_mode || 'single',
+      stream_pip_main_camera_uid: updatedSettings.stream_pip_main_camera_uid || null,
+      horizontal_pip_main_camera_uid: updatedSettings.horizontal_pip_main_camera_uid || null,
+      vertical_pip_main_camera_uid: updatedSettings.vertical_pip_main_camera_uid || null,
       updated_at: updatedSettings.updated_at
     })
 

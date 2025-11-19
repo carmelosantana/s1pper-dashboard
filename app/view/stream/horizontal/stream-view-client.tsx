@@ -133,6 +133,7 @@ export default function StreamViewClient({
           displayMode={streamCameraDisplayMode}
           enabledCameras={enabledCameras}
           imageRendering="auto"
+          orientation="horizontal"
         />
       </div>
 

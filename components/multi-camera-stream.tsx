@@ -17,6 +17,8 @@ interface MultiCameraStreamProps {
   enabledCameras: CameraFeed[]
   onCameraSelect?: (uid: string) => void
   imageRendering?: 'auto' | 'crisp-edges' | 'pixelated'
+  orientation?: 'horizontal' | 'vertical'
+  disableInteraction?: boolean
 }
 
 export function MultiCameraStream({
@@ -24,7 +26,9 @@ export function MultiCameraStream({
   displayMode,
   enabledCameras,
   onCameraSelect,
-  imageRendering = 'auto'
+  imageRendering = 'auto',
+  orientation = 'horizontal',
+  disableInteraction = false
 }: MultiCameraStreamProps) {
   const [selectedCameraIndex, setSelectedCameraIndex] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
@@ -112,8 +116,8 @@ export function MultiCameraStream({
           )}
         </div>
 
-        {/* Camera switcher - Only show if multiple cameras */}
-        {enabledCameras.length > 1 && (
+        {/* Camera switcher - Only show if multiple cameras and interaction is enabled */}
+        {enabledCameras.length > 1 && !disableInteraction && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-black/70 backdrop-blur-md rounded-full px-4 py-2">
             {enabledCameras.map((camera, index) => (
               <Button
@@ -143,10 +147,18 @@ export function MultiCameraStream({
     return (
       <div className={cn(
         "grid gap-2",
-        enabledCameras.length === 1 && "grid-cols-1",
-        enabledCameras.length === 2 && "grid-cols-2",
-        enabledCameras.length === 3 && "grid-cols-2",
-        enabledCameras.length >= 4 && "grid-cols-2 grid-rows-2",
+        orientation === 'vertical' ? (
+          // Vertical orientation: stack cameras vertically
+          "grid-cols-1"
+        ) : (
+          // Horizontal orientation: use grid layout
+          cn(
+            enabledCameras.length === 1 && "grid-cols-1",
+            enabledCameras.length === 2 && "grid-cols-2",
+            enabledCameras.length === 3 && "grid-cols-2",
+            enabledCameras.length >= 4 && "grid-cols-2 grid-rows-2"
+          )
+        ),
         className
       )}>
         {enabledCameras.map((camera) => (
@@ -194,9 +206,14 @@ export function MultiCameraStream({
           </div>
         </div>
 
-        {/* Thumbnail cameras - Only show if multiple cameras */}
-        {enabledCameras.length > 1 && (
-          <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+        {/* Thumbnail cameras - Only show if multiple cameras and interaction is enabled */}
+        {enabledCameras.length > 1 && !disableInteraction && (
+          <div className={cn(
+            "absolute flex gap-3",
+            orientation === 'vertical' 
+              ? "bottom-4 left-4 right-4 flex-row justify-center" // Vertical: centered at bottom
+              : "bottom-6 right-6 flex-col" // Horizontal: right side stack
+          )}>
             {enabledCameras.map((camera, index) => {
               // Don't show the currently selected camera in thumbnails
               if (index === selectedCameraIndex) return null
@@ -206,8 +223,9 @@ export function MultiCameraStream({
                   key={camera.uid}
                   onClick={() => handleCameraSelect(index)}
                   className={cn(
-                    "relative w-32 h-20 bg-black/50 rounded-lg overflow-hidden border-2 transition-all hover:scale-105 hover:border-cyan-500",
+                    "relative bg-black/50 rounded-lg overflow-hidden border-2 transition-all hover:scale-105 hover:border-cyan-500",
                     "focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-black",
+                    orientation === 'vertical' ? "w-40 h-24" : "w-72 h-44", // Horizontal: 2.25x larger (was 32x20, now 72x44), Vertical: larger
                     index === selectedCameraIndex ? "border-cyan-500" : "border-white/20"
                   )}
                 >
@@ -216,7 +234,10 @@ export function MultiCameraStream({
                     "w-full h-full object-cover"
                   )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end p-2">
-                    <span className="text-xs font-medium text-white truncate">
+                    <span className={cn(
+                      "font-medium text-white truncate",
+                      orientation === 'vertical' ? "text-xs" : "text-sm"
+                    )}>
                       {camera.name}
                     </span>
                   </div>

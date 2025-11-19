@@ -26,6 +26,7 @@ import { Slider } from '@/components/ui/slider'
 import { isDevelopment } from '@/lib/utils/environment'
 import { toast } from 'sonner'
 import { trackEvent } from '@/components/umami-analytics'
+import ViewCameraControl from '@/components/view-camera-control'
 
 interface DashboardSettings {
   visibility_mode: 'offline' | 'private' | 'public'
@@ -47,6 +48,9 @@ interface DashboardSettings {
   stream_camera_display_mode: 'single' | 'grid' | 'pip'
   horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip'
   vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip'
+  stream_pip_main_camera_uid: string | null
+  horizontal_pip_main_camera_uid: string | null
+  vertical_pip_main_camera_uid: string | null
 }
 
 interface WebcamConfig {
@@ -54,6 +58,10 @@ interface WebcamConfig {
   name: string
   enabled: boolean
   database_enabled: boolean
+}
+
+interface ViewCameraSettings {
+  [cameraUid: string]: boolean // camera_uid -> enabled
 }
 
 interface MusicFile {
@@ -66,6 +74,9 @@ export default function SettingsCard() {
   const [originalSettings, setOriginalSettings] = useState<DashboardSettings | null>(null)
   const [musicFiles, setMusicFiles] = useState<MusicFile[]>([])
   const [webcams, setWebcams] = useState<WebcamConfig[]>([])
+  const [streamViewCameras, setStreamViewCameras] = useState<ViewCameraSettings>({})
+  const [horizontalViewCameras, setHorizontalViewCameras] = useState<ViewCameraSettings>({})
+  const [verticalViewCameras, setVerticalViewCameras] = useState<ViewCameraSettings>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -118,7 +129,10 @@ export default function SettingsCard() {
           streaming_title_enabled: data.streaming_title_enabled ?? true,
           stream_camera_display_mode: data.stream_camera_display_mode || 'single',
           horizontal_stream_camera_display_mode: data.horizontal_stream_camera_display_mode || 'single',
-          vertical_stream_camera_display_mode: data.vertical_stream_camera_display_mode || 'single'
+          vertical_stream_camera_display_mode: data.vertical_stream_camera_display_mode || 'single',
+          stream_pip_main_camera_uid: data.stream_pip_main_camera_uid || null,
+          horizontal_pip_main_camera_uid: data.horizontal_pip_main_camera_uid || null,
+          vertical_pip_main_camera_uid: data.vertical_pip_main_camera_uid || null
         }
         setSettings(settingsWithDefaults)
         setOriginalSettings(settingsWithDefaults)
@@ -149,10 +163,94 @@ export default function SettingsCard() {
       if (response.ok) {
         const data = await response.json()
         setWebcams(data.webcams || [])
+        
+        // Load per-view camera settings after webcams are loaded
+        await loadViewCameraSettings()
       }
     } catch (error) {
       console.error('Error loading webcams:', error)
     }
+  }
+
+  const loadViewCameraSettings = async () => {
+    try {
+      // Load settings for each view
+      const [streamRes, horizontalRes, verticalRes] = await Promise.all([
+        fetch('/api/view-camera/settings?view=stream'),
+        fetch('/api/view-camera/settings?view=horizontal'),
+        fetch('/api/view-camera/settings?view=vertical')
+      ])
+
+      if (streamRes.ok) {
+        const data = await streamRes.json()
+        const cameraMap: ViewCameraSettings = {}
+        data.settings.forEach((s: any) => {
+          cameraMap[s.camera_uid] = s.enabled
+        })
+        setStreamViewCameras(cameraMap)
+      }
+
+      if (horizontalRes.ok) {
+        const data = await horizontalRes.json()
+        const cameraMap: ViewCameraSettings = {}
+        data.settings.forEach((s: any) => {
+          cameraMap[s.camera_uid] = s.enabled
+        })
+        setHorizontalViewCameras(cameraMap)
+      }
+
+      if (verticalRes.ok) {
+        const data = await verticalRes.json()
+        const cameraMap: ViewCameraSettings = {}
+        data.settings.forEach((s: any) => {
+          cameraMap[s.camera_uid] = s.enabled
+        })
+        setVerticalViewCameras(cameraMap)
+      }
+    } catch (error) {
+      console.error('Error loading view camera settings:', error)
+    }
+  }
+
+  const updateViewCameraEnabled = async (view: 'stream' | 'horizontal' | 'vertical', cameraUid: string, enabled: boolean) => {
+    try {
+      const response = await fetch('/api/view-camera/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view, camera_uid: cameraUid, enabled })
+      })
+
+      if (response.ok) {
+        // Update local state
+        if (view === 'stream') {
+          setStreamViewCameras(prev => ({ ...prev, [cameraUid]: enabled }))
+        } else if (view === 'horizontal') {
+          setHorizontalViewCameras(prev => ({ ...prev, [cameraUid]: enabled }))
+        } else {
+          setVerticalViewCameras(prev => ({ ...prev, [cameraUid]: enabled }))
+        }
+        toast.success(`Camera ${enabled ? 'enabled' : 'disabled'} for ${view} view`)
+      } else {
+        toast.error('Failed to update camera')
+      }
+    } catch (error) {
+      console.error('Error updating view camera:', error)
+      toast.error('Failed to update camera')
+    }
+  }
+
+  const getViewCameraEnabled = (view: 'stream' | 'horizontal' | 'vertical', cameraUid: string): boolean => {
+    const viewMap = view === 'stream' ? streamViewCameras :
+                    view === 'horizontal' ? horizontalViewCameras :
+                    verticalViewCameras
+    
+    // If not explicitly set, default to global camera enabled state
+    if (viewMap[cameraUid] === undefined) {
+      const webcam = webcams.find(w => w.uid === cameraUid)
+      return webcam?.database_enabled ?? false
+    }
+    
+    return viewMap[cameraUid]
   }
 
   const checkPrinterStatus = async () => {
@@ -899,8 +997,8 @@ export default function SettingsCard() {
                   <Camera className="h-4 w-4" />
                   Camera Management
                 </h3>
-                <p className="text-xs text-muted-foreground mb-3">
-                  Control which cameras are displayed in stream views
+                <p className="text-xs text-muted-foreground mb-4">
+                  Control which cameras are displayed in each stream view independently
                 </p>
                 
                 {webcams.length === 0 ? (
@@ -909,181 +1007,98 @@ export default function SettingsCard() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {/* Camera Enable/Disable Toggles */}
-                    <div className="space-y-2">
-                      {webcams.map((webcam) => (
-                        <div
-                          key={webcam.uid}
-                          className="flex items-center justify-between p-3 rounded bg-zinc-900 hover:bg-zinc-800 transition-colors"
-                        >
-                          <div className="flex items-center gap-3 flex-1">
-                            <Camera className="h-4 w-4 text-cyan-500" />
-                            <span className="text-sm">{webcam.name}</span>
-                          </div>
-                          <Switch
-                            checked={webcam.database_enabled}
-                            onCheckedChange={async (checked) => {
-                              try {
-                                const response = await fetch('/api/camera/settings', {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ uid: webcam.uid, enabled: checked })
-                                })
-                                if (response.ok) {
-                                  await loadWebcams()
-                                  toast.success(`${webcam.name} ${checked ? 'enabled' : 'disabled'}`)
-                                } else {
+                    {/* Global Camera Enable/Disable */}
+                    <div className="space-y-2 p-4 border border-zinc-800 rounded-lg bg-zinc-950">
+                      <Label>Global Camera Availability</Label>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Enable/disable cameras globally. Disabled cameras won't appear in any view.
+                      </p>
+                      <div className="space-y-2">
+                        {webcams.map((webcam) => (
+                          <div
+                            key={webcam.uid}
+                            className="flex items-center justify-between p-3 rounded bg-zinc-900 hover:bg-zinc-800 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <Camera className="h-4 w-4 text-cyan-500" />
+                              <span className="text-sm">{webcam.name}</span>
+                            </div>
+                            <Switch
+                              checked={webcam.database_enabled}
+                              onCheckedChange={async (checked) => {
+                                try {
+                                  const response = await fetch('/api/camera/settings', {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ uid: webcam.uid, enabled: checked })
+                                  })
+                                  if (response.ok) {
+                                    await loadWebcams()
+                                    toast.success(`${webcam.name} ${checked ? 'enabled' : 'disabled'} globally`)
+                                  } else {
+                                    toast.error('Failed to update camera')
+                                  }
+                                } catch (error) {
                                   toast.error('Failed to update camera')
                                 }
-                              } catch (error) {
-                                toast.error('Failed to update camera')
-                              }
-                            }}
-                          />
-                        </div>
-                      ))}
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
-                    {/* Display Mode Selection - Only show when multiple cameras are enabled */}
-                    {webcams.filter(w => w.database_enabled).length > 1 && (
-                      <div className="space-y-6 pt-3 border-t border-zinc-800">
-                        {/* Global Display Mode */}
-                        <div className="space-y-3">
-                          <div className="space-y-2">
-                            <Label htmlFor="camera-display-mode">Global Camera Display Mode</Label>
-                            <p className="text-xs text-muted-foreground">
-                              Default display mode for all stream views (can be overridden per view)
-                            </p>
-                          </div>
-                          <Select
-                            value={settings.stream_camera_display_mode}
-                            onValueChange={(value: 'single' | 'grid' | 'pip') => 
-                              updateSettings({ stream_camera_display_mode: value })
-                            }
-                          >
-                            <SelectTrigger id="camera-display-mode">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="single">
-                                <div className="flex flex-col items-start">
-                                  <span className="font-medium">Single View</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Show one camera at a time with switcher
-                                  </span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="grid">
-                                <div className="flex flex-col items-start">
-                                  <span className="font-medium">Grid View</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Display all cameras in a grid layout
-                                  </span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="pip">
-                                <div className="flex flex-col items-start">
-                                  <span className="font-medium">Picture-in-Picture</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Main camera with smaller thumbnails
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
+                    {/* Per-View Camera Settings */}
+                    {webcams.filter(w => w.database_enabled).length > 0 && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-semibold">Per-View Settings</h4>
+                          <p className="text-xs text-muted-foreground">
+                            Configure display mode and cameras for each stream view independently
+                          </p>
                         </div>
 
-                        {/* Horizontal View Display Mode */}
-                        <div className="space-y-3 pt-3 border-t border-zinc-800">
-                          <div className="space-y-2">
-                            <Label htmlFor="horizontal-camera-display-mode">Horizontal Stream Display Mode</Label>
-                            <p className="text-xs text-muted-foreground">
-                              Display mode for /view/stream/horizontal (landscape orientation)
-                            </p>
-                          </div>
-                          <Select
-                            value={settings.horizontal_stream_camera_display_mode}
-                            onValueChange={(value: 'single' | 'grid' | 'pip') => 
-                              updateSettings({ horizontal_stream_camera_display_mode: value })
-                            }
-                          >
-                            <SelectTrigger id="horizontal-camera-display-mode">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="single">
-                                <div className="flex flex-col items-start">
-                                  <span className="font-medium">Single View</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Show one camera at a time with switcher
-                                  </span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="grid">
-                                <div className="flex flex-col items-start">
-                                  <span className="font-medium">Grid View</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Display all cameras in a grid layout
-                                  </span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="pip">
-                                <div className="flex flex-col items-start">
-                                  <span className="font-medium">Picture-in-Picture</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Main camera with smaller thumbnails
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        {/* Stream View (default /view/stream) */}
+                        <ViewCameraControl
+                          view="stream"
+                          viewLabel="Default Stream View"
+                          viewPath="/view/stream"
+                          displayMode={settings.stream_camera_display_mode}
+                          pipMainCameraUid={settings.stream_pip_main_camera_uid}
+                          webcams={webcams}
+                          onDisplayModeChange={(mode) => updateSettings({ stream_camera_display_mode: mode })}
+                          onPipMainCameraChange={(uid) => updateSettings({ stream_pip_main_camera_uid: uid })}
+                          getViewCameraEnabled={(uid) => getViewCameraEnabled('stream', uid)}
+                          onViewCameraEnabledChange={(uid, enabled) => updateViewCameraEnabled('stream', uid, enabled)}
+                        />
 
-                        {/* Vertical View Display Mode */}
-                        <div className="space-y-3 pt-3 border-t border-zinc-800">
-                          <div className="space-y-2">
-                            <Label htmlFor="vertical-camera-display-mode">Vertical Stream Display Mode</Label>
-                            <p className="text-xs text-muted-foreground">
-                              Display mode for /view/stream/vertical (portrait orientation)
-                            </p>
-                          </div>
-                          <Select
-                            value={settings.vertical_stream_camera_display_mode}
-                            onValueChange={(value: 'single' | 'grid' | 'pip') => 
-                              updateSettings({ vertical_stream_camera_display_mode: value })
-                            }
-                          >
-                            <SelectTrigger id="vertical-camera-display-mode">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="single">
-                                <div className="flex flex-col items-start">
-                                  <span className="font-medium">Single View</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Show one camera at a time with switcher
-                                  </span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="grid">
-                                <div className="flex flex-col items-start">
-                                  <span className="font-medium">Grid View</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Display all cameras in a grid layout
-                                  </span>
-                                </div>
-                              </SelectItem>
-                              <SelectItem value="pip">
-                                <div className="flex flex-col items-start">
-                                  <span className="font-medium">Picture-in-Picture</span>
-                                  <span className="text-xs text-muted-foreground">
-                                    Main camera with smaller thumbnails
-                                  </span>
-                                </div>
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        {/* Horizontal Stream View */}
+                        <ViewCameraControl
+                          view="horizontal"
+                          viewLabel="Horizontal Stream View"
+                          viewPath="/view/stream/horizontal"
+                          displayMode={settings.horizontal_stream_camera_display_mode}
+                          pipMainCameraUid={settings.horizontal_pip_main_camera_uid}
+                          webcams={webcams}
+                          onDisplayModeChange={(mode) => updateSettings({ horizontal_stream_camera_display_mode: mode })}
+                          onPipMainCameraChange={(uid) => updateSettings({ horizontal_pip_main_camera_uid: uid })}
+                          getViewCameraEnabled={(uid) => getViewCameraEnabled('horizontal', uid)}
+                          onViewCameraEnabledChange={(uid, enabled) => updateViewCameraEnabled('horizontal', uid, enabled)}
+                        />
+
+                        {/* Vertical Stream View */}
+                        <ViewCameraControl
+                          view="vertical"
+                          viewLabel="Vertical Stream View"
+                          viewPath="/view/stream/vertical"
+                          displayMode={settings.vertical_stream_camera_display_mode}
+                          pipMainCameraUid={settings.vertical_pip_main_camera_uid}
+                          webcams={webcams}
+                          onDisplayModeChange={(mode) => updateSettings({ vertical_stream_camera_display_mode: mode })}
+                          onPipMainCameraChange={(uid) => updateSettings({ vertical_pip_main_camera_uid: uid })}
+                          getViewCameraEnabled={(uid) => getViewCameraEnabled('vertical', uid)}
+                          onViewCameraEnabledChange={(uid, enabled) => updateViewCameraEnabled('vertical', uid, enabled)}
+                        />
                       </div>
                     )}
                   </div>
