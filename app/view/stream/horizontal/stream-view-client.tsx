@@ -21,7 +21,7 @@ interface StreamViewClientProps {
   streamingTitleEnabled: boolean
   dashboardTitle: string
   dashboardSubtitle: string
-  streamCameraDisplayMode: 'single' | 'grid' | 'pip'
+  streamCameraDisplayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
   enabledCameras: Array<{ uid: string; name: string; enabled: boolean }>
 }
 

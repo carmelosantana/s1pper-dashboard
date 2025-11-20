@@ -276,9 +276,9 @@ export interface DashboardSettings {
   streaming_music_crossfade_duration: number
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
-  stream_camera_display_mode: 'single' | 'grid' | 'pip'
-  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip'
-  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip'
+  stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
   stream_pip_main_camera_uid: string | null
   horizontal_pip_main_camera_uid: string | null
   vertical_pip_main_camera_uid: string | null

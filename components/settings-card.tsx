@@ -27,6 +27,7 @@ import { isDevelopment } from '@/lib/utils/environment'
 import { toast } from 'sonner'
 import { trackEvent } from '@/components/umami-analytics'
 import ViewCameraControl from '@/components/view-camera-control'
+import { useWebSocket } from '@/lib/contexts/websocket-context'
 
 interface DashboardSettings {
   visibility_mode: 'offline' | 'private' | 'public'
@@ -45,9 +46,9 @@ interface DashboardSettings {
   streaming_music_crossfade_duration: number
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
-  stream_camera_display_mode: 'single' | 'grid' | 'pip'
-  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip'
-  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip'
+  stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
   stream_pip_main_camera_uid: string | null
   horizontal_pip_main_camera_uid: string | null
   vertical_pip_main_camera_uid: string | null
@@ -70,6 +71,7 @@ interface MusicFile {
 }
 
 export default function SettingsCard() {
+  const { isConnected } = useWebSocket()
   const [settings, setSettings] = useState<DashboardSettings | null>(null)
   const [originalSettings, setOriginalSettings] = useState<DashboardSettings | null>(null)
   const [musicFiles, setMusicFiles] = useState<MusicFile[]>([])
@@ -548,7 +550,7 @@ export default function SettingsCard() {
               <div>
                 <h3 className="text-sm font-semibold mb-3">Printer Status</h3>
                 <div className="flex items-center gap-2 text-sm">
-                  {printerStatus === 'online' ? (
+                  {isConnected && printerStatus === 'online' ? (
                     <>
                       <CheckCircle2 className="h-4 w-4 text-green-500" />
                       <span className="text-green-500">Online</span>

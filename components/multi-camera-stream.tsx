@@ -13,7 +13,7 @@ interface CameraFeed {
 
 interface MultiCameraStreamProps {
   className?: string
-  displayMode: 'single' | 'grid' | 'pip'
+  displayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
   enabledCameras: CameraFeed[]
   onCameraSelect?: (uid: string) => void
   imageRendering?: 'auto' | 'crisp-edges' | 'pixelated'
@@ -40,6 +40,34 @@ export function MultiCameraStream({
       setSelectedCameraIndex(0)
     }
   }, [enabledCameras.length, selectedCameraIndex])
+
+  // Automatic camera switching for offline_video_swap mode
+  useEffect(() => {
+    if (displayMode !== 'offline_video_swap' || enabledCameras.length <= 1) return
+
+    const currentCamera = enabledCameras[selectedCameraIndex]
+    if (!currentCamera || !cameraErrors[currentCamera.uid]) return
+
+    // Find next available camera that's not offline
+    let nextIndex = (selectedCameraIndex + 1) % enabledCameras.length
+    let attempts = 0
+    const maxAttempts = enabledCameras.length
+
+    // Round-robin through cameras to find one that's online
+    while (attempts < maxAttempts) {
+      const nextCamera = enabledCameras[nextIndex]
+      if (!cameraErrors[nextCamera.uid]) {
+        // Found an online camera, switch to it
+        setIsTransitioning(true)
+        setSelectedCameraIndex(nextIndex)
+        onCameraSelect?.(nextCamera.uid)
+        setTimeout(() => setIsTransitioning(false), 300)
+        return
+      }
+      nextIndex = (nextIndex + 1) % enabledCameras.length
+      attempts++
+    }
+  }, [cameraErrors, selectedCameraIndex, enabledCameras, displayMode, onCameraSelect])
 
   // Handle camera selection with callback
   const handleCameraSelect = (index: number) => {
@@ -246,6 +274,43 @@ export function MultiCameraStream({
             })}
           </div>
         )}
+      </div>
+    )
+  }
+
+  // Offline Video Swap mode - Single camera with automatic switching on errors
+  if (displayMode === 'offline_video_swap') {
+    return (
+      <div className={cn("relative", className)}>
+        {/* Main camera feed */}
+        <div className="relative w-full h-full">
+          {renderCameraImage(
+            enabledCameras[selectedCameraIndex],
+            cn(
+              "w-full h-full object-cover rounded-lg transition-opacity duration-300",
+              isTransitioning ? "opacity-0" : "opacity-100"
+            ),
+            true // Include key for transition
+          )}
+        </div>
+
+        {/* Camera info with auto-swap indicator */}
+        <div className="absolute bottom-4 left-4 bg-black/70 backdrop-blur-md rounded-lg px-4 py-2 flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Camera className="h-4 w-4 text-cyan-500" />
+            <span className="text-sm font-medium text-white">
+              {enabledCameras[selectedCameraIndex].name}
+            </span>
+          </div>
+          {enabledCameras.length > 1 && (
+            <div className="flex items-center gap-2 border-l border-white/20 pl-3">
+              <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xs text-gray-300">
+                Auto-swap {enabledCameras.length} cams
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     )
   }

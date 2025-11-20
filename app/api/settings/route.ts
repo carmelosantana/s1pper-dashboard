@@ -220,23 +220,23 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    if (stream_camera_display_mode && !['single', 'grid', 'pip'].includes(stream_camera_display_mode)) {
+    if (stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(stream_camera_display_mode)) {
       return NextResponse.json(
-        { error: 'Invalid stream_camera_display_mode. Must be single, grid, or pip' },
+        { error: 'Invalid stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
         { status: 400 }
       )
     }
 
-    if (horizontal_stream_camera_display_mode && !['single', 'grid', 'pip'].includes(horizontal_stream_camera_display_mode)) {
+    if (horizontal_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(horizontal_stream_camera_display_mode)) {
       return NextResponse.json(
-        { error: 'Invalid horizontal_stream_camera_display_mode. Must be single, grid, or pip' },
+        { error: 'Invalid horizontal_stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
         { status: 400 }
       )
     }
 
-    if (vertical_stream_camera_display_mode && !['single', 'grid', 'pip'].includes(vertical_stream_camera_display_mode)) {
+    if (vertical_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(vertical_stream_camera_display_mode)) {
       return NextResponse.json(
-        { error: 'Invalid vertical_stream_camera_display_mode. Must be single, grid, or pip' },
+        { error: 'Invalid vertical_stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
         { status: 400 }
       )
     }
