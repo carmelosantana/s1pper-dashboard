@@ -42,8 +42,6 @@ interface DashboardSettings {
   streaming_music_loop: boolean
   streaming_music_volume: number
   streaming_music_playlist: string[]
-  streaming_music_crossfade_enabled: boolean
-  streaming_music_crossfade_duration: number
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
   stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
@@ -126,8 +124,6 @@ export default function SettingsCard() {
         const settingsWithDefaults = {
           ...data,
           streaming_music_playlist: data.streaming_music_playlist || [],
-          streaming_music_crossfade_enabled: data.streaming_music_crossfade_enabled ?? false,
-          streaming_music_crossfade_duration: data.streaming_music_crossfade_duration ?? 3.0,
           streaming_title_enabled: data.streaming_title_enabled ?? true,
           stream_camera_display_mode: data.stream_camera_display_mode || 'single',
           horizontal_stream_camera_display_mode: data.horizontal_stream_camera_display_mode || 'single',
@@ -874,37 +870,7 @@ export default function SettingsCard() {
                         />
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label htmlFor="crossfade-enabled">Enable Crossfade</Label>
-                          <p className="text-xs text-muted-foreground">Smooth transitions between songs</p>
-                        </div>
-                        <Switch
-                          id="crossfade-enabled"
-                          checked={settings.streaming_music_crossfade_enabled}
-                          onCheckedChange={(checked) => updateSettings({ streaming_music_crossfade_enabled: checked })}
-                        />
-                      </div>
 
-                      {settings.streaming_music_crossfade_enabled && (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="crossfade-duration">
-                              Crossfade Duration
-                            </Label>
-                            <span className="text-sm text-muted-foreground">{Number(settings.streaming_music_crossfade_duration).toFixed(1)}s</span>
-                          </div>
-                          <Slider
-                            id="crossfade-duration"
-                            min={0}
-                            max={10}
-                            step={0.1}
-                            value={[Number(settings.streaming_music_crossfade_duration)]}
-                            onValueChange={(value: number[]) => updateSettings({ streaming_music_crossfade_duration: value[0] })}
-                            className="w-full"
-                          />
-                        </div>
-                      )}
                     </>
                   )}
                 </div>

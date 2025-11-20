@@ -272,8 +272,6 @@ export interface DashboardSettings {
   streaming_music_loop: boolean
   streaming_music_volume: number
   streaming_music_playlist: string[]
-  streaming_music_crossfade_enabled: boolean
-  streaming_music_crossfade_duration: number
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
   stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
@@ -315,8 +313,6 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       streaming_music_loop: true,
       streaming_music_volume: 50,
       streaming_music_playlist: [],
-      streaming_music_crossfade_enabled: false,
-      streaming_music_crossfade_duration: 3.0,
       streaming_title_enabled: true,
       selected_camera_uid: null,
       stream_camera_display_mode: 'single',
@@ -330,11 +326,7 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
   try {
     const results = await query<DashboardSettings>('SELECT * FROM dashboard_settings ORDER BY id DESC LIMIT 1')
     if (results[0]) {
-      // Convert NUMERIC fields from string to number
-      return {
-        ...results[0],
-        streaming_music_crossfade_duration: parseFloat(results[0].streaming_music_crossfade_duration as any) || 3.0
-      }
+      return results[0]
     }
     return null
   } catch (error) {
@@ -354,8 +346,6 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       streaming_music_loop: true,
       streaming_music_volume: 50,
       streaming_music_playlist: [],
-      streaming_music_crossfade_enabled: false,
-      streaming_music_crossfade_duration: 3.0,
       streaming_title_enabled: true,
       selected_camera_uid: null,
       created_at: new Date().toISOString(),
@@ -378,8 +368,6 @@ export async function updateDashboardSettings(
   streaming_music_loop?: boolean,
   streaming_music_playlist?: string[],
   streaming_music_volume?: number,
-  streaming_music_crossfade_enabled?: boolean,
-  streaming_music_crossfade_duration?: number,
   streaming_title_enabled?: boolean,
   selected_camera_uid?: string | null,
   stream_camera_display_mode?: 'single' | 'grid' | 'pip',
@@ -469,18 +457,6 @@ export async function updateDashboardSettings(
     if (streaming_music_volume !== undefined) {
       updateFields.push(`streaming_music_volume = $${paramCount}`)
       values.push(streaming_music_volume)
-      paramCount++
-    }
-
-    if (streaming_music_crossfade_enabled !== undefined) {
-      updateFields.push(`streaming_music_crossfade_enabled = $${paramCount}`)
-      values.push(streaming_music_crossfade_enabled)
-      paramCount++
-    }
-
-    if (streaming_music_crossfade_duration !== undefined) {
-      updateFields.push(`streaming_music_crossfade_duration = $${paramCount}`)
-      values.push(streaming_music_crossfade_duration)
       paramCount++
     }
 

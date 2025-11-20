@@ -24,8 +24,6 @@ export default async function StreamPage() {
   const musicVolume = dashboardSettings?.streaming_music_volume ?? 50
   const musicPlaylist = dashboardSettings?.streaming_music_playlist ?? []
   const musicLoop = dashboardSettings?.streaming_music_loop ?? false
-  const musicCrossfadeEnabled = dashboardSettings?.streaming_music_crossfade_enabled ?? false
-  const musicCrossfadeDuration = dashboardSettings?.streaming_music_crossfade_duration ?? 3.0
 
   // Extract title/subtitle settings with fallbacks
   const streamingTitleEnabled = dashboardSettings?.streaming_title_enabled ?? true
@@ -58,8 +56,6 @@ export default async function StreamPage() {
         musicVolume={musicVolume}
         musicPlaylist={musicPlaylist}
         musicLoop={musicLoop}
-        musicCrossfadeEnabled={musicCrossfadeEnabled}
-        musicCrossfadeDuration={musicCrossfadeDuration}
         streamingTitleEnabled={streamingTitleEnabled}
         dashboardTitle={dashboardTitle}
         dashboardSubtitle={dashboardSubtitle}

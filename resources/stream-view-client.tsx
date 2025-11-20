@@ -16,8 +16,6 @@ interface StreamViewClientProps {
   musicVolume: number
   musicPlaylist: string[]
   musicLoop: boolean
-  musicCrossfadeEnabled: boolean
-  musicCrossfadeDuration: number
   streamingTitleEnabled: boolean
   dashboardTitle: string
   dashboardSubtitle: string
@@ -64,8 +62,6 @@ export default function StreamViewClient({
   musicVolume,
   musicPlaylist,
   musicLoop,
-  musicCrossfadeEnabled,
-  musicCrossfadeDuration,
   streamingTitleEnabled,
   dashboardTitle,
   dashboardSubtitle,
@@ -167,8 +163,6 @@ export default function StreamViewClient({
           volume={musicVolume}
           playlist={musicPlaylist}
           loop={musicLoop}
-          crossfadeEnabled={musicCrossfadeEnabled}
-          crossfadeDuration={musicCrossfadeDuration}
         />
         
         {/* Full screen video feed - Portrait aspect ratio */}
@@ -355,8 +349,6 @@ export default function StreamViewClient({
         volume={musicVolume}
         playlist={musicPlaylist}
         loop={musicLoop}
-        crossfadeEnabled={musicCrossfadeEnabled}
-        crossfadeDuration={musicCrossfadeDuration}
       />
       
       {/* Full screen video feed */}

@@ -16,8 +16,6 @@ interface StreamViewClientProps {
   musicVolume: number
   musicPlaylist: string[]
   musicLoop: boolean
-  musicCrossfadeEnabled: boolean
-  musicCrossfadeDuration: number
   streamingTitleEnabled: boolean
   dashboardTitle: string
   dashboardSubtitle: string
@@ -64,8 +62,6 @@ export default function StreamViewClient({
   musicVolume,
   musicPlaylist,
   musicLoop,
-  musicCrossfadeEnabled,
-  musicCrossfadeDuration,
   streamingTitleEnabled,
   dashboardTitle,
   dashboardSubtitle,
@@ -97,8 +93,6 @@ export default function StreamViewClient({
           volume={musicVolume}
           playlist={musicPlaylist}
           loop={musicLoop}
-          crossfadeEnabled={musicCrossfadeEnabled}
-          crossfadeDuration={musicCrossfadeDuration}
         />
         <div className="text-center">
           <Activity className="h-16 w-16 mx-auto mb-4 text-gray-500" />
@@ -122,8 +116,6 @@ export default function StreamViewClient({
         volume={musicVolume}
         playlist={musicPlaylist}
         loop={musicLoop}
-        crossfadeEnabled={musicCrossfadeEnabled}
-        crossfadeDuration={musicCrossfadeDuration}
       />
       
       {/* Full screen video feed */}
