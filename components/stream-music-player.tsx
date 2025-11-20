@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 interface StreamMusicPlayerProps {
   enabled: boolean
@@ -25,6 +25,7 @@ export function StreamMusicPlayer({
   const [needsInteraction, setNeedsInteraction] = useState(false)
   const [isCrossfading, setIsCrossfading] = useState(false)
   const crossfadeIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const hasStartedCrossfadeRef = useRef(false)
 
   // Listen for user interaction if autoplay is blocked
   useEffect(() => {
@@ -52,23 +53,28 @@ export function StreamMusicPlayer({
 
   // Handle volume changes
   useEffect(() => {
-    if (audioRef.current) {
+    if (audioRef.current && !isCrossfading) {
       audioRef.current.volume = volume / 100
     }
-    if (nextAudioRef.current) {
-      nextAudioRef.current.volume = 0 // Will be adjusted during crossfade
+    if (nextAudioRef.current && isCrossfading) {
+      // During crossfade, volume is managed by the crossfade logic
+      return
     }
-  }, [volume])
+  }, [volume, isCrossfading])
 
   // Start crossfade to next track
-  const startCrossfade = (nextIndex: number) => {
+  const startCrossfade = useCallback((nextIndex: number) => {
     if (!crossfadeEnabled || !audioRef.current || !nextAudioRef.current || isCrossfading) {
       // If crossfade disabled, just switch tracks normally
       setCurrentTrackIndex(nextIndex)
+      hasStartedCrossfadeRef.current = false
       return
     }
 
+    console.log('[Music Player] Starting crossfade to track index:', nextIndex)
     setIsCrossfading(true)
+    hasStartedCrossfadeRef.current = true
+    
     const currentAudio = audioRef.current
     const nextAudio = nextAudioRef.current
     const targetVolume = volume / 100
@@ -76,10 +82,10 @@ export function StreamMusicPlayer({
     // Load next track
     const nextTrack = playlist[nextIndex]
     nextAudio.src = `/music/${nextTrack}`
+    nextAudio.volume = 0
     nextAudio.load()
 
     // Start playing next track at 0 volume
-    nextAudio.volume = 0
     nextAudio.play()
       .then(() => {
         console.log('[Music Player] Crossfade started to:', nextTrack)
@@ -94,12 +100,12 @@ export function StreamMusicPlayer({
           const progress = step / steps
           
           // Fade out current track
-          if (currentAudio) {
+          if (currentAudio && !currentAudio.paused) {
             currentAudio.volume = Math.max(0, targetVolume * (1 - progress))
           }
           
           // Fade in next track
-          if (nextAudio) {
+          if (nextAudio && !nextAudio.paused) {
             nextAudio.volume = Math.min(targetVolume, targetVolume * progress)
           }
           
@@ -110,32 +116,52 @@ export function StreamMusicPlayer({
               crossfadeIntervalRef.current = null
             }
             
+            console.log('[Music Player] Crossfade complete, switching to next track')
+            
             // Pause and reset current track
             if (currentAudio) {
               currentAudio.pause()
               currentAudio.currentTime = 0
+              currentAudio.volume = targetVolume
             }
             
-            // Make next track the current track
+            // Swap the audio elements: next becomes current
+            if (audioRef.current && nextAudioRef.current) {
+              const tempSrc = audioRef.current.src
+              audioRef.current.src = nextAudio.src
+              audioRef.current.currentTime = nextAudio.currentTime
+              audioRef.current.volume = targetVolume
+              
+              // Clear next audio
+              nextAudio.pause()
+              nextAudio.currentTime = 0
+              nextAudio.src = ''
+            }
+            
+            // Update state
             setCurrentTrackIndex(nextIndex)
             setIsCrossfading(false)
-            
-            console.log('[Music Player] Crossfade complete')
+            hasStartedCrossfadeRef.current = false
           }
         }, intervalMs)
       })
       .catch(error => {
         console.error('[Music Player] Error during crossfade:', error)
         setIsCrossfading(false)
+        hasStartedCrossfadeRef.current = false
         // Fallback to normal track change
         setCurrentTrackIndex(nextIndex)
       })
-  }
+  }, [crossfadeEnabled, isCrossfading, volume, playlist, crossfadeDuration])
 
   // Handle track end - move to next track or loop
-  const handleTrackEnd = () => {
-    if (!enabled || playlist.length === 0 || isCrossfading) return
+  const handleTrackEnd = useCallback(() => {
+    if (!enabled || playlist.length === 0 || isCrossfading) {
+      console.log('[Music Player] Track ended but not progressing:', { enabled, playlistLength: playlist.length, isCrossfading })
+      return
+    }
 
+    console.log('[Music Player] Track ended, moving to next track')
     const isLastTrack = currentTrackIndex === playlist.length - 1
     
     if (isLastTrack) {
@@ -145,9 +171,11 @@ export function StreamMusicPlayer({
           startCrossfade(0)
         } else {
           setCurrentTrackIndex(0)
+          hasStartedCrossfadeRef.current = false
         }
       } else {
         // Stop at the end
+        console.log('[Music Player] Reached end of playlist, stopping')
         if (audioRef.current) {
           audioRef.current.pause()
         }
@@ -159,31 +187,39 @@ export function StreamMusicPlayer({
         startCrossfade(nextIndex)
       } else {
         setCurrentTrackIndex(nextIndex)
+        hasStartedCrossfadeRef.current = false
       }
     }
-  }
+  }, [enabled, playlist.length, isCrossfading, currentTrackIndex, loop, crossfadeEnabled, crossfadeDuration, startCrossfade])
 
   // Start crossfade before track ends if crossfade is enabled
   useEffect(() => {
-    if (!audioRef.current || !crossfadeEnabled || crossfadeDuration <= 0) return
+    if (!enabled || !audioRef.current || !crossfadeEnabled || crossfadeDuration <= 0 || playlist.length === 0) {
+      return
+    }
     
     const audio = audioRef.current
     
     const handleTimeUpdate = () => {
-      if (!audio || isCrossfading || playlist.length === 0) return
+      if (!audio || isCrossfading || playlist.length === 0 || hasStartedCrossfadeRef.current) {
+        return
+      }
       
       const timeRemaining = audio.duration - audio.currentTime
       
       // Start crossfade when time remaining equals crossfade duration
-      if (timeRemaining > 0 && timeRemaining <= crossfadeDuration && !isCrossfading) {
+      // Add a small buffer (0.1s) to ensure we catch it
+      if (timeRemaining > 0 && timeRemaining <= crossfadeDuration + 0.1 && !hasStartedCrossfadeRef.current) {
         const isLastTrack = currentTrackIndex === playlist.length - 1
         
         if (isLastTrack && !loop) {
           // Don't crossfade at the end if not looping
+          console.log('[Music Player] Last track, not looping, skipping crossfade')
           return
         }
         
         const nextIndex = isLastTrack ? 0 : currentTrackIndex + 1
+        console.log('[Music Player] Time to crossfade! Time remaining:', timeRemaining, 'Next index:', nextIndex)
         startCrossfade(nextIndex)
       }
     }
@@ -193,7 +229,7 @@ export function StreamMusicPlayer({
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate)
     }
-  }, [audioRef.current, crossfadeEnabled, crossfadeDuration, currentTrackIndex, isCrossfading, playlist.length, loop])
+  }, [enabled, crossfadeEnabled, crossfadeDuration, currentTrackIndex, isCrossfading, playlist.length, loop, startCrossfade])
 
   // Cleanup crossfade interval on unmount
   useEffect(() => {
@@ -206,11 +242,37 @@ export function StreamMusicPlayer({
 
   // Handle track changes
   useEffect(() => {
-    if (audioRef.current && enabled && playlist.length > 0 && !isCrossfading) {
+    // Don't reload if we're in the middle of a crossfade
+    if (isCrossfading) {
+      console.log('[Music Player] Skipping track load during crossfade')
+      return
+    }
+
+    if (audioRef.current && enabled && playlist.length > 0) {
       const currentTrack = playlist[currentTrackIndex]
-      audioRef.current.src = `/music/${currentTrack}`
+      const currentSrc = audioRef.current.src
+      const newSrc = `/music/${currentTrack}`
       
-      console.log('[Music Player] Loading track:', currentTrack, 'Volume:', volume)
+      // Only reload if the source is actually different
+      if (currentSrc && currentSrc.endsWith(newSrc)) {
+        console.log('[Music Player] Track already loaded:', currentTrack)
+        // Make sure it's playing
+        if (audioRef.current.paused) {
+          audioRef.current.play().catch(error => {
+            if (error.name === 'NotAllowedError') {
+              console.log('[Music Player] Autoplay blocked - waiting for user interaction')
+              setNeedsInteraction(true)
+            } else {
+              console.error('[Music Player] Error playing existing track:', error)
+            }
+          })
+        }
+        return
+      }
+      
+      console.log('[Music Player] Loading new track:', currentTrack, 'Volume:', volume)
+      audioRef.current.src = newSrc
+      audioRef.current.volume = volume / 100
       
       // Always try to autoplay - if it fails, we'll request user interaction
       audioRef.current.play()
