@@ -73,10 +73,14 @@ export async function GET(request: NextRequest) {
       streaming_music_loop: settings.streaming_music_loop,
       streaming_music_playlist: settings.streaming_music_playlist || [],
       streaming_music_volume: settings.streaming_music_volume || 50,
-      streaming_music_crossfade_enabled: settings.streaming_music_crossfade_enabled || false,
-      streaming_music_crossfade_duration: settings.streaming_music_crossfade_duration || 3.0,
       streaming_title_enabled: settings.streaming_title_enabled ?? true,
       selected_camera_uid: settings.selected_camera_uid,
+      stream_camera_display_mode: settings.stream_camera_display_mode || 'single',
+      horizontal_stream_camera_display_mode: settings.horizontal_stream_camera_display_mode || 'single',
+      vertical_stream_camera_display_mode: settings.vertical_stream_camera_display_mode || 'single',
+      stream_pip_main_camera_uid: settings.stream_pip_main_camera_uid || null,
+      horizontal_pip_main_camera_uid: settings.horizontal_pip_main_camera_uid || null,
+      vertical_pip_main_camera_uid: settings.vertical_pip_main_camera_uid || null,
       updated_at: settings.updated_at
     })
   } catch (error) {
@@ -123,7 +127,13 @@ export async function PUT(request: NextRequest) {
       streaming_music_crossfade_enabled,
       streaming_music_crossfade_duration,
       streaming_title_enabled,
-      selected_camera_uid
+      selected_camera_uid,
+      stream_camera_display_mode,
+      horizontal_stream_camera_display_mode,
+      vertical_stream_camera_display_mode,
+      stream_pip_main_camera_uid,
+      horizontal_pip_main_camera_uid,
+      vertical_pip_main_camera_uid
     } = body
 
     if (visibility_mode && !['offline', 'private', 'public'].includes(visibility_mode)) {
@@ -182,28 +192,30 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    if (streaming_music_crossfade_enabled !== undefined && typeof streaming_music_crossfade_enabled !== 'boolean') {
+    if (streaming_title_enabled !== undefined && typeof streaming_title_enabled !== 'boolean') {
       return NextResponse.json(
-        { error: 'Invalid streaming_music_crossfade_enabled. Must be a boolean' },
+        { error: 'Invalid streaming_title_enabled. Must be a boolean' },
         { status: 400 }
       )
     }
 
-    if (streaming_music_crossfade_duration !== undefined) {
-      const duration = Number(streaming_music_crossfade_duration)
-      if (isNaN(duration) || duration < 0 || duration > 10) {
-        return NextResponse.json(
-          { error: 'Invalid streaming_music_crossfade_duration. Must be a number between 0 and 10' },
-          { status: 400 }
-        )
-      }
-      // Round to 1 decimal place to match database precision
-      body.streaming_music_crossfade_duration = Math.round(duration * 10) / 10
+    if (stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(stream_camera_display_mode)) {
+      return NextResponse.json(
+        { error: 'Invalid stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
+        { status: 400 }
+      )
     }
 
-    if (streaming_title_enabled !== undefined && typeof streaming_title_enabled !== 'boolean') {
+    if (horizontal_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(horizontal_stream_camera_display_mode)) {
       return NextResponse.json(
-        { error: 'Invalid streaming_title_enabled. Must be a boolean' },
+        { error: 'Invalid horizontal_stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
+        { status: 400 }
+      )
+    }
+
+    if (vertical_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(vertical_stream_camera_display_mode)) {
+      return NextResponse.json(
+        { error: 'Invalid vertical_stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
         { status: 400 }
       )
     }
@@ -225,7 +237,13 @@ export async function PUT(request: NextRequest) {
       streaming_music_crossfade_enabled,
       streaming_music_crossfade_duration,
       streaming_title_enabled,
-      selected_camera_uid
+      selected_camera_uid,
+      stream_camera_display_mode,
+      horizontal_stream_camera_display_mode,
+      vertical_stream_camera_display_mode,
+      stream_pip_main_camera_uid,
+      horizontal_pip_main_camera_uid,
+      vertical_pip_main_camera_uid
     )
     
     if (!updatedSettings) {
@@ -248,10 +266,14 @@ export async function PUT(request: NextRequest) {
       streaming_music_loop: updatedSettings.streaming_music_loop,
       streaming_music_playlist: updatedSettings.streaming_music_playlist || [],
       streaming_music_volume: updatedSettings.streaming_music_volume || 50,
-      streaming_music_crossfade_enabled: updatedSettings.streaming_music_crossfade_enabled || false,
-      streaming_music_crossfade_duration: updatedSettings.streaming_music_crossfade_duration || 3.0,
       streaming_title_enabled: updatedSettings.streaming_title_enabled ?? true,
       selected_camera_uid: updatedSettings.selected_camera_uid,
+      stream_camera_display_mode: updatedSettings.stream_camera_display_mode || 'single',
+      horizontal_stream_camera_display_mode: updatedSettings.horizontal_stream_camera_display_mode || 'single',
+      vertical_stream_camera_display_mode: updatedSettings.vertical_stream_camera_display_mode || 'single',
+      stream_pip_main_camera_uid: updatedSettings.stream_pip_main_camera_uid || null,
+      horizontal_pip_main_camera_uid: updatedSettings.horizontal_pip_main_camera_uid || null,
+      vertical_pip_main_camera_uid: updatedSettings.vertical_pip_main_camera_uid || null,
       updated_at: updatedSettings.updated_at
     })
 

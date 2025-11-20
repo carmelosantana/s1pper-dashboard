@@ -26,6 +26,8 @@ import { Slider } from '@/components/ui/slider'
 import { isDevelopment } from '@/lib/utils/environment'
 import { toast } from 'sonner'
 import { trackEvent } from '@/components/umami-analytics'
+import ViewCameraControl from '@/components/view-camera-control'
+import { useWebSocket } from '@/lib/contexts/websocket-context'
 
 interface DashboardSettings {
   visibility_mode: 'offline' | 'private' | 'public'
@@ -40,10 +42,14 @@ interface DashboardSettings {
   streaming_music_loop: boolean
   streaming_music_volume: number
   streaming_music_playlist: string[]
-  streaming_music_crossfade_enabled: boolean
-  streaming_music_crossfade_duration: number
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
+  stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  stream_pip_main_camera_uid: string | null
+  horizontal_pip_main_camera_uid: string | null
+  vertical_pip_main_camera_uid: string | null
 }
 
 interface WebcamConfig {
@@ -53,16 +59,24 @@ interface WebcamConfig {
   database_enabled: boolean
 }
 
+interface ViewCameraSettings {
+  [cameraUid: string]: boolean // camera_uid -> enabled
+}
+
 interface MusicFile {
   name: string
   url: string
 }
 
 export default function SettingsCard() {
+  const { isConnected } = useWebSocket()
   const [settings, setSettings] = useState<DashboardSettings | null>(null)
   const [originalSettings, setOriginalSettings] = useState<DashboardSettings | null>(null)
   const [musicFiles, setMusicFiles] = useState<MusicFile[]>([])
   const [webcams, setWebcams] = useState<WebcamConfig[]>([])
+  const [streamViewCameras, setStreamViewCameras] = useState<ViewCameraSettings>({})
+  const [horizontalViewCameras, setHorizontalViewCameras] = useState<ViewCameraSettings>({})
+  const [verticalViewCameras, setVerticalViewCameras] = useState<ViewCameraSettings>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -110,9 +124,13 @@ export default function SettingsCard() {
         const settingsWithDefaults = {
           ...data,
           streaming_music_playlist: data.streaming_music_playlist || [],
-          streaming_music_crossfade_enabled: data.streaming_music_crossfade_enabled ?? false,
-          streaming_music_crossfade_duration: data.streaming_music_crossfade_duration ?? 3.0,
-          streaming_title_enabled: data.streaming_title_enabled ?? true
+          streaming_title_enabled: data.streaming_title_enabled ?? true,
+          stream_camera_display_mode: data.stream_camera_display_mode || 'single',
+          horizontal_stream_camera_display_mode: data.horizontal_stream_camera_display_mode || 'single',
+          vertical_stream_camera_display_mode: data.vertical_stream_camera_display_mode || 'single',
+          stream_pip_main_camera_uid: data.stream_pip_main_camera_uid || null,
+          horizontal_pip_main_camera_uid: data.horizontal_pip_main_camera_uid || null,
+          vertical_pip_main_camera_uid: data.vertical_pip_main_camera_uid || null
         }
         setSettings(settingsWithDefaults)
         setOriginalSettings(settingsWithDefaults)
@@ -143,10 +161,94 @@ export default function SettingsCard() {
       if (response.ok) {
         const data = await response.json()
         setWebcams(data.webcams || [])
+        
+        // Load per-view camera settings after webcams are loaded
+        await loadViewCameraSettings()
       }
     } catch (error) {
       console.error('Error loading webcams:', error)
     }
+  }
+
+  const loadViewCameraSettings = async () => {
+    try {
+      // Load settings for each view
+      const [streamRes, horizontalRes, verticalRes] = await Promise.all([
+        fetch('/api/view-camera/settings?view=stream'),
+        fetch('/api/view-camera/settings?view=horizontal'),
+        fetch('/api/view-camera/settings?view=vertical')
+      ])
+
+      if (streamRes.ok) {
+        const data = await streamRes.json()
+        const cameraMap: ViewCameraSettings = {}
+        data.settings.forEach((s: any) => {
+          cameraMap[s.camera_uid] = s.enabled
+        })
+        setStreamViewCameras(cameraMap)
+      }
+
+      if (horizontalRes.ok) {
+        const data = await horizontalRes.json()
+        const cameraMap: ViewCameraSettings = {}
+        data.settings.forEach((s: any) => {
+          cameraMap[s.camera_uid] = s.enabled
+        })
+        setHorizontalViewCameras(cameraMap)
+      }
+
+      if (verticalRes.ok) {
+        const data = await verticalRes.json()
+        const cameraMap: ViewCameraSettings = {}
+        data.settings.forEach((s: any) => {
+          cameraMap[s.camera_uid] = s.enabled
+        })
+        setVerticalViewCameras(cameraMap)
+      }
+    } catch (error) {
+      console.error('Error loading view camera settings:', error)
+    }
+  }
+
+  const updateViewCameraEnabled = async (view: 'stream' | 'horizontal' | 'vertical', cameraUid: string, enabled: boolean) => {
+    try {
+      const response = await fetch('/api/view-camera/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ view, camera_uid: cameraUid, enabled })
+      })
+
+      if (response.ok) {
+        // Update local state
+        if (view === 'stream') {
+          setStreamViewCameras(prev => ({ ...prev, [cameraUid]: enabled }))
+        } else if (view === 'horizontal') {
+          setHorizontalViewCameras(prev => ({ ...prev, [cameraUid]: enabled }))
+        } else {
+          setVerticalViewCameras(prev => ({ ...prev, [cameraUid]: enabled }))
+        }
+        toast.success(`Camera ${enabled ? 'enabled' : 'disabled'} for ${view} view`)
+      } else {
+        toast.error('Failed to update camera')
+      }
+    } catch (error) {
+      console.error('Error updating view camera:', error)
+      toast.error('Failed to update camera')
+    }
+  }
+
+  const getViewCameraEnabled = (view: 'stream' | 'horizontal' | 'vertical', cameraUid: string): boolean => {
+    const viewMap = view === 'stream' ? streamViewCameras :
+                    view === 'horizontal' ? horizontalViewCameras :
+                    verticalViewCameras
+    
+    // If not explicitly set, default to global camera enabled state
+    if (viewMap[cameraUid] === undefined) {
+      const webcam = webcams.find(w => w.uid === cameraUid)
+      return webcam?.database_enabled ?? false
+    }
+    
+    return viewMap[cameraUid]
   }
 
   const checkPrinterStatus = async () => {
@@ -444,7 +546,7 @@ export default function SettingsCard() {
               <div>
                 <h3 className="text-sm font-semibold mb-3">Printer Status</h3>
                 <div className="flex items-center gap-2 text-sm">
-                  {printerStatus === 'online' ? (
+                  {isConnected && printerStatus === 'online' ? (
                     <>
                       <CheckCircle2 className="h-4 w-4 text-green-500" />
                       <span className="text-green-500">Online</span>
@@ -768,37 +870,7 @@ export default function SettingsCard() {
                         />
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label htmlFor="crossfade-enabled">Enable Crossfade</Label>
-                          <p className="text-xs text-muted-foreground">Smooth transitions between songs</p>
-                        </div>
-                        <Switch
-                          id="crossfade-enabled"
-                          checked={settings.streaming_music_crossfade_enabled}
-                          onCheckedChange={(checked) => updateSettings({ streaming_music_crossfade_enabled: checked })}
-                        />
-                      </div>
 
-                      {settings.streaming_music_crossfade_enabled && (
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="crossfade-duration">
-                              Crossfade Duration
-                            </Label>
-                            <span className="text-sm text-muted-foreground">{Number(settings.streaming_music_crossfade_duration).toFixed(1)}s</span>
-                          </div>
-                          <Slider
-                            id="crossfade-duration"
-                            min={0}
-                            max={10}
-                            step={0.1}
-                            value={[Number(settings.streaming_music_crossfade_duration)]}
-                            onValueChange={(value: number[]) => updateSettings({ streaming_music_crossfade_duration: value[0] })}
-                            className="w-full"
-                          />
-                        </div>
-                      )}
                     </>
                   )}
                 </div>
@@ -886,6 +958,120 @@ export default function SettingsCard() {
                   </div>
                 </div>
               )}
+
+              {/* Camera Management Section */}
+              <div className="border-t border-zinc-800 pt-4">
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Camera className="h-4 w-4" />
+                  Camera Management
+                </h3>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Control which cameras are displayed in each stream view independently
+                </p>
+                
+                {webcams.length === 0 ? (
+                  <div className="text-sm text-muted-foreground p-4 bg-zinc-900 rounded-lg">
+                    No cameras detected. Please check your Moonraker configuration.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Global Camera Enable/Disable */}
+                    <div className="space-y-2 p-4 border border-zinc-800 rounded-lg bg-zinc-950">
+                      <Label>Global Camera Availability</Label>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Enable/disable cameras globally. Disabled cameras won't appear in any view.
+                      </p>
+                      <div className="space-y-2">
+                        {webcams.map((webcam) => (
+                          <div
+                            key={webcam.uid}
+                            className="flex items-center justify-between p-3 rounded bg-zinc-900 hover:bg-zinc-800 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <Camera className="h-4 w-4 text-cyan-500" />
+                              <span className="text-sm">{webcam.name}</span>
+                            </div>
+                            <Switch
+                              checked={webcam.database_enabled}
+                              onCheckedChange={async (checked) => {
+                                try {
+                                  const response = await fetch('/api/camera/settings', {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ uid: webcam.uid, enabled: checked })
+                                  })
+                                  if (response.ok) {
+                                    await loadWebcams()
+                                    toast.success(`${webcam.name} ${checked ? 'enabled' : 'disabled'} globally`)
+                                  } else {
+                                    toast.error('Failed to update camera')
+                                  }
+                                } catch (error) {
+                                  toast.error('Failed to update camera')
+                                }
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Per-View Camera Settings */}
+                    {webcams.filter(w => w.database_enabled).length > 0 && (
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-semibold">Per-View Settings</h4>
+                          <p className="text-xs text-muted-foreground">
+                            Configure display mode and cameras for each stream view independently
+                          </p>
+                        </div>
+
+                        {/* Stream View (default /view/stream) */}
+                        <ViewCameraControl
+                          view="stream"
+                          viewLabel="Default Stream View"
+                          viewPath="/view/stream"
+                          displayMode={settings.stream_camera_display_mode}
+                          pipMainCameraUid={settings.stream_pip_main_camera_uid}
+                          webcams={webcams}
+                          onDisplayModeChange={(mode) => updateSettings({ stream_camera_display_mode: mode })}
+                          onPipMainCameraChange={(uid) => updateSettings({ stream_pip_main_camera_uid: uid })}
+                          getViewCameraEnabled={(uid) => getViewCameraEnabled('stream', uid)}
+                          onViewCameraEnabledChange={(uid, enabled) => updateViewCameraEnabled('stream', uid, enabled)}
+                        />
+
+                        {/* Horizontal Stream View */}
+                        <ViewCameraControl
+                          view="horizontal"
+                          viewLabel="Horizontal Stream View"
+                          viewPath="/view/stream/horizontal"
+                          displayMode={settings.horizontal_stream_camera_display_mode}
+                          pipMainCameraUid={settings.horizontal_pip_main_camera_uid}
+                          webcams={webcams}
+                          onDisplayModeChange={(mode) => updateSettings({ horizontal_stream_camera_display_mode: mode })}
+                          onPipMainCameraChange={(uid) => updateSettings({ horizontal_pip_main_camera_uid: uid })}
+                          getViewCameraEnabled={(uid) => getViewCameraEnabled('horizontal', uid)}
+                          onViewCameraEnabledChange={(uid, enabled) => updateViewCameraEnabled('horizontal', uid, enabled)}
+                        />
+
+                        {/* Vertical Stream View */}
+                        <ViewCameraControl
+                          view="vertical"
+                          viewLabel="Vertical Stream View"
+                          viewPath="/view/stream/vertical"
+                          displayMode={settings.vertical_stream_camera_display_mode}
+                          pipMainCameraUid={settings.vertical_pip_main_camera_uid}
+                          webcams={webcams}
+                          onDisplayModeChange={(mode) => updateSettings({ vertical_stream_camera_display_mode: mode })}
+                          onPipMainCameraChange={(uid) => updateSettings({ vertical_pip_main_camera_uid: uid })}
+                          getViewCameraEnabled={(uid) => getViewCameraEnabled('vertical', uid)}
+                          onViewCameraEnabledChange={(uid, enabled) => updateViewCameraEnabled('vertical', uid, enabled)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </TabsContent>
         </Tabs>

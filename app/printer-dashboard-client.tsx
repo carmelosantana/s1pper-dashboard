@@ -39,7 +39,9 @@ export default function PrinterDashboardClient({
   dashboardTitle = "s1pper's Dashboard",
   dashboardSubtitle = "A dashboard for s1pper, the Ender 3 S1 Pro"
 }: PrinterDashboardClientProps) {
-  const { printerStatus, temperatureHistory, isConnected } = usePrinterData()
+  const { printerStatus: wsStatus, temperatureHistory, isConnected } = usePrinterData()
+  // Use WebSocket data if available, otherwise fall back to initial server-side data
+  const printerStatus = wsStatus || initialStatus
   const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats | null>(initialLifetimeStats)
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
   const [previousProgress, setPreviousProgress] = useState<number>(0)
@@ -153,8 +155,9 @@ export default function PrinterDashboardClient({
     }
   }, [printerStatus])
 
-  // Handle offline state
-  if (!isConnected || !printerStatus || printerStatus.print.state === 'offline') {
+  // Handle offline state - only show if we have no printer data at all
+  // If we have initial data but WebSocket isn't connected yet, still show the dashboard
+  if (!printerStatus || printerStatus.print.state === 'offline') {
     // Check if this is a configuration error
     const isConfigurationError = printerStatus?.system?.klippyMessage?.includes('PRINTER_HOST environment variable not configured')
     
