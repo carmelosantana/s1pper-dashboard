@@ -105,6 +105,11 @@ export async function GET(request: NextRequest) {
     headers.set('Connection', 'keep-alive');
     headers.set('X-Accel-Buffering', 'no');
     
+    // Add CORS headers to allow requests from the server IP
+    headers.set('Access-Control-Allow-Origin', '*');
+    headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type');
+    
     return new NextResponse(response.body, { headers });
   } catch (error) {
     console.error('Camera stream error:', error);

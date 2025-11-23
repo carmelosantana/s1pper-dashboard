@@ -5,7 +5,7 @@ import type { ConfigFile } from '@/lib/types'
 
 export async function GET() {
   try {
-    const configDir = path.join(process.cwd(), 's1pper')
+    const configDir = path.join(process.cwd(), 'public', 'configs')
     
     const configFiles: ConfigFile[] = [
       {
@@ -42,7 +42,7 @@ export async function GET() {
         file.content = content
       } catch (error) {
         console.error(`Error reading ${file.name}:`, error)
-        file.content = `# Error loading ${file.name}\n# File may not exist or is not readable`
+        file.content = `# Error loading ${file.name}\n# File may not exist at public/configs/${file.name}`
       }
     }
 
