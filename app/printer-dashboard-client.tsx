@@ -14,10 +14,12 @@ import { FaviconManager } from "@/components/favicon-manager"
 import { Confetti, type ConfettiRef } from "@/components/ui/confetti"
 import { usePrinterData } from "@/lib/hooks/use-printer-data"
 import type { PrinterStatus, TemperatureHistory, LifetimeStats } from '@/lib/types'
+import type { ModuleSettings } from '@/lib/database'
 import { CameraComponent } from "@/components/camera-component"
 import { CircularProgress } from "@/components/ui/circular-progress"
 import { trackEvent } from "@/components/umami-analytics"
 import { formatTime, formatFilamentLength, formatLifetimeTime, formatFinishTime } from "@/lib/utils/formatting"
+import { ModuleRenderer } from "@/components/modules/module-renderer"
 
 import GuestbookCard from "@/components/guestbook-card"
 import { SettingsControl } from "@/components/settings-control"
@@ -29,6 +31,7 @@ interface PrinterDashboardClientProps {
   isDatabaseConfigured?: boolean
   dashboardTitle?: string
   dashboardSubtitle?: string
+  enabledModules?: ModuleSettings[]
 }
 
 export default function PrinterDashboardClient({ 
@@ -37,7 +40,8 @@ export default function PrinterDashboardClient({
   initialLifetimeStats, 
   isDatabaseConfigured = false,
   dashboardTitle = "s1pper's Dashboard",
-  dashboardSubtitle = "A dashboard for s1pper, the Ender 3 S1 Pro"
+  dashboardSubtitle = "A dashboard for s1pper, the Ender 3 S1 Pro",
+  enabledModules = []
 }: PrinterDashboardClientProps) {
   const { printerStatus: wsStatus, temperatureHistory, isConnected } = usePrinterData()
   // Use WebSocket data if available, otherwise fall back to initial server-side data
@@ -711,6 +715,17 @@ export default function PrinterDashboardClient({
 
           </div>
         </div>
+        
+        {/* Modules */}
+        {enabledModules && enabledModules.length > 0 && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold flex items-center gap-2">
+              <Grid2X2 className="h-6 w-6 text-cyan-500" />
+              Modules
+            </h2>
+            <ModuleRenderer moduleSettings={enabledModules} />
+          </div>
+        )}
         
         {/* Confetti canvas */}
         <Confetti ref={confettiRef} />

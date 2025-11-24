@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { AlertCircle, Settings as SettingsIcon, Cpu, Layout, Radio, Upload, Trash2, Loader2, CheckCircle2, XCircle, Save, RotateCcw, Volume2, Camera } from 'lucide-react'
+import { AlertCircle, Settings as SettingsIcon, Cpu, Layout, Radio, Upload, Trash2, Loader2, CheckCircle2, XCircle, Save, RotateCcw, Volume2, Camera, Grid2X2 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Slider } from '@/components/ui/slider'
 import { isDevelopment } from '@/lib/utils/environment'
@@ -28,6 +28,7 @@ import { toast } from 'sonner'
 import { trackEvent } from '@/components/umami-analytics'
 import ViewCameraControl from '@/components/view-camera-control'
 import { useWebSocket } from '@/lib/contexts/websocket-context'
+import { ModulesSettings } from '@/components/modules-settings'
 
 interface DashboardSettings {
   visibility_mode: 'offline' | 'private' | 'public'
@@ -521,7 +522,7 @@ export default function SettingsCard() {
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="printer" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="printer">
               <Cpu className="h-4 w-4 mr-2" />
               Printer
@@ -537,6 +538,10 @@ export default function SettingsCard() {
             <TabsTrigger value="streaming">
               <Radio className="h-4 w-4 mr-2" />
               Streaming
+            </TabsTrigger>
+            <TabsTrigger value="modules">
+              <Grid2X2 className="h-4 w-4 mr-2" />
+              Modules
             </TabsTrigger>
           </TabsList>
 
@@ -1073,6 +1078,11 @@ export default function SettingsCard() {
                 )}
               </div>
             </div>
+          </TabsContent>
+
+          {/* Modules Tab */}
+          <TabsContent value="modules" className="space-y-4">
+            <ModulesSettings />
           </TabsContent>
         </Tabs>
       </CardContent>

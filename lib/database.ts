@@ -124,6 +124,25 @@ export async function initializeDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_guestbook_created_at ON guestbook_entries(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_guestbook_printer_status ON guestbook_entries(printer_status);
 
+      CREATE TABLE IF NOT EXISTS module_settings (
+        id SERIAL PRIMARY KEY,
+        module_id VARCHAR(255) NOT NULL UNIQUE,
+        enabled BOOLEAN DEFAULT false,
+        position VARCHAR(50) DEFAULT 'main',
+        display_order INTEGER DEFAULT 0,
+        settings JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_module_settings_enabled ON module_settings(enabled);
+      CREATE INDEX IF NOT EXISTS idx_module_settings_position ON module_settings(position);
+      CREATE INDEX IF NOT EXISTS idx_module_settings_order ON module_settings(display_order);
+
+      INSERT INTO module_settings (module_id, enabled, position, display_order, settings)
+      VALUES ('grow-tent', false, 'main', 0, '{"apiUrl": "http://localhost:3000", "refreshInterval": 30000, "showControls": true, "compactView": false}'::jsonb)
+      ON CONFLICT (module_id) DO NOTHING;
+
       CREATE TABLE IF NOT EXISTS dashboard_settings (
         id SERIAL PRIMARY KEY,
         visibility_mode VARCHAR(20) NOT NULL DEFAULT 'public' CHECK (visibility_mode IN ('offline', 'private', 'public')),
@@ -294,6 +313,21 @@ export interface ViewCameraSettings {
   created_at: string
   updated_at: string
 }
+
+/**
+ * Module Settings Interface
+ */
+export interface ModuleSettings {
+  id: number
+  module_id: string
+  enabled: boolean
+  position: 'main' | 'sidebar' | 'bottom' | 'floating'
+  display_order: number
+  settings: any // JSONB column
+  created_at: string
+  updated_at: string
+}
+
 
 // Get current dashboard settings
 export async function getDashboardSettings(): Promise<DashboardSettings | null> {
@@ -690,6 +724,160 @@ export async function updateViewCameraEnabled(viewName: 'stream' | 'horizontal' 
     return results[0] || null
   } catch (error) {
     console.error('Error updating view camera enabled state:', error)
+    return null
+  }
+}
+
+/**
+ * Module Settings Functions
+ */
+
+/**
+ * Get all module settings
+ */
+export async function getAllModuleSettings(): Promise<ModuleSettings[]> {
+  if (!isDatabaseAvailable()) {
+    return []
+  }
+
+  try {
+    const results = await query<ModuleSettings>(
+      'SELECT * FROM module_settings ORDER BY display_order, module_id'
+    )
+    return results
+  } catch (error) {
+    console.error('Error fetching module settings:', error)
+    return []
+  }
+}
+
+/**
+ * Get settings for a specific module
+ */
+export async function getModuleSettings(moduleId: string): Promise<ModuleSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const results = await query<ModuleSettings>(
+      'SELECT * FROM module_settings WHERE module_id = $1',
+      [moduleId]
+    )
+    return results[0] || null
+  } catch (error) {
+    console.error('Error fetching module settings:', error)
+    return null
+  }
+}
+
+/**
+ * Get all enabled modules
+ */
+export async function getEnabledModules(): Promise<ModuleSettings[]> {
+  if (!isDatabaseAvailable()) {
+    return []
+  }
+
+  try {
+    const results = await query<ModuleSettings>(
+      'SELECT * FROM module_settings WHERE enabled = true ORDER BY display_order, module_id'
+    )
+    return results
+  } catch (error) {
+    console.error('Error fetching enabled modules:', error)
+    return []
+  }
+}
+
+/**
+ * Update module settings
+ */
+export async function updateModuleSettings(
+  moduleId: string,
+  updates: Partial<Omit<ModuleSettings, 'id' | 'module_id' | 'created_at' | 'updated_at'>>
+): Promise<ModuleSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const setClauses: string[] = []
+    const values: any[] = [moduleId]
+    let paramIndex = 2
+
+    if (updates.enabled !== undefined) {
+      setClauses.push(`enabled = $${paramIndex++}`)
+      values.push(updates.enabled)
+    }
+
+    if (updates.position !== undefined) {
+      setClauses.push(`position = $${paramIndex++}`)
+      values.push(updates.position)
+    }
+
+    if (updates.display_order !== undefined) {
+      setClauses.push(`display_order = $${paramIndex++}`)
+      values.push(updates.display_order)
+    }
+
+    if (updates.settings !== undefined) {
+      setClauses.push(`settings = $${paramIndex++}`)
+      values.push(JSON.stringify(updates.settings))
+    }
+
+    if (setClauses.length === 0) {
+      return await getModuleSettings(moduleId)
+    }
+
+    setClauses.push('updated_at = CURRENT_TIMESTAMP')
+
+    const results = await query<ModuleSettings>(
+      `UPDATE module_settings 
+       SET ${setClauses.join(', ')}
+       WHERE module_id = $1
+       RETURNING *`,
+      values
+    )
+
+    return results[0] || null
+  } catch (error) {
+    console.error('Error updating module settings:', error)
+    return null
+  }
+}
+
+/**
+ * Upsert module settings (create if not exists, update if exists)
+ */
+export async function upsertModuleSettings(
+  moduleId: string,
+  enabled: boolean,
+  position: 'main' | 'sidebar' | 'bottom' | 'floating',
+  displayOrder: number,
+  settings: any
+): Promise<ModuleSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const results = await query<ModuleSettings>(
+      `INSERT INTO module_settings (module_id, enabled, position, display_order, settings)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (module_id)
+       DO UPDATE SET 
+         enabled = $2,
+         position = $3,
+         display_order = $4,
+         settings = $5,
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [moduleId, enabled, position, displayOrder, JSON.stringify(settings)]
+    )
+    return results[0] || null
+  } catch (error) {
+    console.error('Error upserting module settings:', error)
     return null
   }
 }
