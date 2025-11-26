@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Activity, Thermometer } from 'lucide-react'
 import { FaviconManager } from '@/components/favicon-manager'
-import { StreamMusicPlayer } from '@/components/stream-music-player'
 import { MultiCameraStream } from '@/components/multi-camera-stream'
 import { usePrinterData } from '@/lib/hooks/use-printer-data'
 import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
@@ -12,10 +11,6 @@ import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
 interface StreamViewClientProps {
   initialStatus: PrinterStatus | null
   initialTemperatureHistory: TemperatureHistory | null
-  musicEnabled: boolean
-  musicVolume: number
-  musicPlaylist: string[]
-  musicLoop: boolean
   streamingTitleEnabled: boolean
   dashboardTitle: string
   dashboardSubtitle: string
@@ -58,10 +53,6 @@ function formatFinishTime(estimatedTimeLeft: number): string {
 export default function StreamViewClient({ 
   initialStatus, 
   initialTemperatureHistory,
-  musicEnabled,
-  musicVolume,
-  musicPlaylist,
-  musicLoop,
   streamingTitleEnabled,
   dashboardTitle,
   dashboardSubtitle,
@@ -87,13 +78,6 @@ export default function StreamViewClient({
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <FaviconManager status="offline" />
-        {/* Keep music playing even when disconnected */}
-        <StreamMusicPlayer 
-          enabled={musicEnabled}
-          volume={musicVolume}
-          playlist={musicPlaylist}
-          loop={musicLoop}
-        />
         <div className="text-center">
           <Activity className="h-16 w-16 mx-auto mb-4 text-gray-500" />
           <h1 className="text-2xl font-bold mb-2">Printer Disconnected</h1>
@@ -109,14 +93,6 @@ export default function StreamViewClient({
   return (
     <div className="relative min-h-screen w-screen bg-black overflow-hidden">
       <FaviconManager status={printerStatus.print.state} />
-      
-      {/* Stream music player */}
-      <StreamMusicPlayer 
-        enabled={musicEnabled}
-        volume={musicVolume}
-        playlist={musicPlaylist}
-        loop={musicLoop}
-      />
       
       {/* Full screen video feed */}
       <div className="absolute inset-0 bg-black">

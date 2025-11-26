@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Activity, Thermometer } from 'lucide-react'
 import { FaviconManager } from '@/components/favicon-manager'
-import { StreamMusicPlayer } from '@/components/stream-music-player'
 import { MultiCameraStream } from '@/components/multi-camera-stream'
 import { usePrinterData } from '@/lib/hooks/use-printer-data'
 import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
@@ -12,10 +11,6 @@ import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
 interface StreamViewClientProps {
   initialStatus: PrinterStatus | null
   initialTemperatureHistory: TemperatureHistory | null
-  musicEnabled: boolean
-  musicVolume: number
-  musicPlaylist: string[]
-  musicLoop: boolean
   streamingTitleEnabled: boolean
   dashboardTitle: string
   dashboardSubtitle: string
@@ -58,10 +53,6 @@ function formatFinishTime(estimatedTimeLeft: number): string {
 export default function StreamViewClient({ 
   initialStatus, 
   initialTemperatureHistory,
-  musicEnabled,
-  musicVolume,
-  musicPlaylist,
-  musicLoop,
   streamingTitleEnabled,
   dashboardTitle,
   dashboardSubtitle,
@@ -157,13 +148,6 @@ export default function StreamViewClient({
     return (
       <div className="relative min-h-screen w-screen bg-black overflow-hidden" style={{ maxWidth: '1080px', margin: '0 auto' }}>
         <FaviconManager status={printerStatus.print.state} />
-        
-        <StreamMusicPlayer 
-          enabled={musicEnabled}
-          volume={musicVolume}
-          playlist={musicPlaylist}
-          loop={musicLoop}
-        />
         
         {/* Full screen video feed - Portrait aspect ratio */}
         <div className="relative h-screen">
@@ -343,13 +327,6 @@ export default function StreamViewClient({
   return (
     <div className="relative min-h-screen w-screen bg-black overflow-hidden">
       <FaviconManager status={printerStatus.print.state} />
-      
-      <StreamMusicPlayer 
-        enabled={musicEnabled}
-        volume={musicVolume}
-        playlist={musicPlaylist}
-        loop={musicLoop}
-      />
       
       {/* Full screen video feed */}
       <div className="absolute inset-0 bg-black">

@@ -68,11 +68,6 @@ export async function GET(request: NextRequest) {
       dashboard_icon_url: settings.dashboard_icon_url,
       config_page_enabled: settings.config_page_enabled,
       guestbook_enabled: settings.guestbook_enabled,
-      streaming_music_file: settings.streaming_music_file,
-      streaming_music_enabled: settings.streaming_music_enabled,
-      streaming_music_loop: settings.streaming_music_loop,
-      streaming_music_playlist: settings.streaming_music_playlist || [],
-      streaming_music_volume: settings.streaming_music_volume || 50,
       streaming_title_enabled: settings.streaming_title_enabled ?? true,
       selected_camera_uid: settings.selected_camera_uid,
       stream_camera_display_mode: settings.stream_camera_display_mode || 'single',
@@ -119,13 +114,6 @@ export async function PUT(request: NextRequest) {
       dashboard_icon_url,
       config_page_enabled,
       guestbook_enabled,
-      streaming_music_file,
-      streaming_music_enabled,
-      streaming_music_loop,
-      streaming_music_playlist,
-      streaming_music_volume,
-      streaming_music_crossfade_enabled,
-      streaming_music_crossfade_duration,
       streaming_title_enabled,
       selected_camera_uid,
       stream_camera_display_mode,
@@ -160,34 +148,6 @@ export async function PUT(request: NextRequest) {
     if (guestbook_enabled !== undefined && typeof guestbook_enabled !== 'boolean') {
       return NextResponse.json(
         { error: 'Invalid guestbook_enabled. Must be a boolean' },
-        { status: 400 }
-      )
-    }
-
-    if (streaming_music_enabled !== undefined && typeof streaming_music_enabled !== 'boolean') {
-      return NextResponse.json(
-        { error: 'Invalid streaming_music_enabled. Must be a boolean' },
-        { status: 400 }
-      )
-    }
-
-    if (streaming_music_loop !== undefined && typeof streaming_music_loop !== 'boolean') {
-      return NextResponse.json(
-        { error: 'Invalid streaming_music_loop. Must be a boolean' },
-        { status: 400 }
-      )
-    }
-
-    if (streaming_music_playlist !== undefined && !Array.isArray(streaming_music_playlist)) {
-      return NextResponse.json(
-        { error: 'Invalid streaming_music_playlist. Must be an array' },
-        { status: 400 }
-      )
-    }
-
-    if (streaming_music_volume !== undefined && (typeof streaming_music_volume !== 'number' || streaming_music_volume < 0 || streaming_music_volume > 100)) {
-      return NextResponse.json(
-        { error: 'Invalid streaming_music_volume. Must be a number between 0 and 100' },
         { status: 400 }
       )
     }
@@ -229,13 +189,6 @@ export async function PUT(request: NextRequest) {
       dashboard_icon_url,
       config_page_enabled,
       guestbook_enabled,
-      streaming_music_file,
-      streaming_music_enabled,
-      streaming_music_loop,
-      streaming_music_playlist,
-      streaming_music_volume,
-      streaming_music_crossfade_enabled,
-      streaming_music_crossfade_duration,
       streaming_title_enabled,
       selected_camera_uid,
       stream_camera_display_mode,
@@ -261,11 +214,6 @@ export async function PUT(request: NextRequest) {
       dashboard_icon_url: updatedSettings.dashboard_icon_url,
       config_page_enabled: updatedSettings.config_page_enabled,
       guestbook_enabled: updatedSettings.guestbook_enabled,
-      streaming_music_file: updatedSettings.streaming_music_file,
-      streaming_music_enabled: updatedSettings.streaming_music_enabled,
-      streaming_music_loop: updatedSettings.streaming_music_loop,
-      streaming_music_playlist: updatedSettings.streaming_music_playlist || [],
-      streaming_music_volume: updatedSettings.streaming_music_volume || 50,
       streaming_title_enabled: updatedSettings.streaming_title_enabled ?? true,
       selected_camera_uid: updatedSettings.selected_camera_uid,
       stream_camera_display_mode: updatedSettings.stream_camera_display_mode || 'single',

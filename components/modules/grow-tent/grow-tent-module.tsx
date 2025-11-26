@@ -220,14 +220,19 @@ function PortControl({ deviceId, port, client, compact }: PortControlProps) {
     setIsUpdating(true)
     const result = await client.control({
       deviceId,
+      action: 'setMode',
       port: port.port,
-      settings: {
+      params: {
         mode: checked ? 1 : 0,
       }
     })
     
     if (result?.success) {
       setIsOn(checked)
+    } else {
+      // Revert on failure
+      setIsOn(!checked)
+      console.warn('Failed to toggle port, controls may be disabled')
     }
     
     setIsUpdating(false)
@@ -240,13 +245,17 @@ function PortControl({ deviceId, port, client, compact }: PortControlProps) {
     // Debounce the API call
     setTimeout(async () => {
       setIsUpdating(true)
-      await client.control({
+      const result = await client.control({
         deviceId,
+        action: 'setSpeed',
         port: port.port,
-        settings: {
-          onSpeed: newSpeed,
-        }
+        value: newSpeed,
       })
+      
+      if (!result?.success) {
+        console.warn('Failed to update speed, controls may be disabled')
+      }
+      
       setIsUpdating(false)
     }, 500)
   }

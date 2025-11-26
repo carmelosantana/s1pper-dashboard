@@ -19,12 +19,6 @@ export default async function StreamPage() {
   const { status, temperatureHistory } = await fetchPrinterData()
   const dashboardSettings = await getDashboardSettings()
 
-  // Extract music settings with fallbacks
-  const musicEnabled = dashboardSettings?.streaming_music_enabled ?? false
-  const musicVolume = dashboardSettings?.streaming_music_volume ?? 50
-  const musicPlaylist = dashboardSettings?.streaming_music_playlist ?? []
-  const musicLoop = dashboardSettings?.streaming_music_loop ?? false
-
   // Extract title/subtitle settings with fallbacks
   const streamingTitleEnabled = dashboardSettings?.streaming_title_enabled ?? true
   const dashboardTitle = dashboardSettings?.dashboard_title ?? "s1pper's Dashboard"
@@ -52,10 +46,6 @@ export default async function StreamPage() {
       <StreamViewClient 
         initialStatus={status} 
         initialTemperatureHistory={temperatureHistory}
-        musicEnabled={musicEnabled}
-        musicVolume={musicVolume}
-        musicPlaylist={musicPlaylist}
-        musicLoop={musicLoop}
         streamingTitleEnabled={streamingTitleEnabled}
         dashboardTitle={dashboardTitle}
         dashboardSubtitle={dashboardSubtitle}

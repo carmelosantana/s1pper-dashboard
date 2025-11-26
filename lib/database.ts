@@ -153,13 +153,6 @@ export async function initializeDatabase(): Promise<void> {
         dashboard_icon_url TEXT,
         config_page_enabled BOOLEAN NOT NULL DEFAULT true,
         guestbook_enabled BOOLEAN NOT NULL DEFAULT true,
-        streaming_music_file VARCHAR(255),
-        streaming_music_enabled BOOLEAN NOT NULL DEFAULT false,
-        streaming_music_loop BOOLEAN NOT NULL DEFAULT true,
-        streaming_music_volume INTEGER NOT NULL DEFAULT 50 CHECK (streaming_music_volume >= 0 AND streaming_music_volume <= 100),
-        streaming_music_playlist TEXT[] DEFAULT '{}',
-        streaming_music_crossfade_enabled BOOLEAN NOT NULL DEFAULT false,
-        streaming_music_crossfade_duration NUMERIC(3,1) NOT NULL DEFAULT 3.0 CHECK (streaming_music_crossfade_duration >= 0 AND streaming_music_crossfade_duration <= 10),
         streaming_title_enabled BOOLEAN NOT NULL DEFAULT true,
         selected_camera_uid VARCHAR(255),
         stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (stream_camera_display_mode IN ('single', 'grid', 'pip')),
@@ -176,11 +169,9 @@ export async function initializeDatabase(): Promise<void> {
         dashboard_title, 
         dashboard_subtitle,
         config_page_enabled,
-        guestbook_enabled,
-        streaming_music_enabled,
-        streaming_music_loop
+        guestbook_enabled
       )
-      SELECT 'public', true, 's1pper''s Dashboard', 'A dashboard for s1pper, the Ender 3 S1 Pro', true, true, false, true
+      SELECT 'public', true, 's1pper''s Dashboard', 'A dashboard for s1pper, the Ender 3 S1 Pro', true, true
       WHERE NOT EXISTS (SELECT 1 FROM dashboard_settings);
 
       CREATE INDEX IF NOT EXISTS idx_dashboard_settings_visibility ON dashboard_settings(visibility_mode);
@@ -286,11 +277,6 @@ export interface DashboardSettings {
   dashboard_icon_url: string | null
   config_page_enabled: boolean
   guestbook_enabled: boolean
-  streaming_music_file: string | null
-  streaming_music_enabled: boolean
-  streaming_music_loop: boolean
-  streaming_music_volume: number
-  streaming_music_playlist: string[]
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
   stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
@@ -342,16 +328,14 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       dashboard_icon_url: null,
       config_page_enabled: true,
       guestbook_enabled: true,
-      streaming_music_file: null,
-      streaming_music_enabled: false,
-      streaming_music_loop: true,
-      streaming_music_volume: 50,
-      streaming_music_playlist: [],
       streaming_title_enabled: true,
       selected_camera_uid: null,
       stream_camera_display_mode: 'single',
       horizontal_stream_camera_display_mode: 'single',
       vertical_stream_camera_display_mode: 'single',
+      stream_pip_main_camera_uid: null,
+      horizontal_pip_main_camera_uid: null,
+      vertical_pip_main_camera_uid: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -375,13 +359,14 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       dashboard_icon_url: null,
       config_page_enabled: true,
       guestbook_enabled: true,
-      streaming_music_file: null,
-      streaming_music_enabled: false,
-      streaming_music_loop: true,
-      streaming_music_volume: 50,
-      streaming_music_playlist: [],
       streaming_title_enabled: true,
       selected_camera_uid: null,
+      stream_camera_display_mode: 'single',
+      horizontal_stream_camera_display_mode: 'single',
+      vertical_stream_camera_display_mode: 'single',
+      stream_pip_main_camera_uid: null,
+      horizontal_pip_main_camera_uid: null,
+      vertical_pip_main_camera_uid: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -397,11 +382,6 @@ export async function updateDashboardSettings(
   dashboard_icon_url?: string | null,
   config_page_enabled?: boolean,
   guestbook_enabled?: boolean,
-  streaming_music_file?: string | null,
-  streaming_music_enabled?: boolean,
-  streaming_music_loop?: boolean,
-  streaming_music_playlist?: string[],
-  streaming_music_volume?: number,
   streaming_title_enabled?: boolean,
   selected_camera_uid?: string | null,
   stream_camera_display_mode?: 'single' | 'grid' | 'pip',
@@ -422,13 +402,13 @@ export async function updateDashboardSettings(
     const values: any[] = []
     let paramCount = 1
 
-    if (visibility_mode !== undefined) {
+    if (visibility_mode !== undefined && visibility_mode !== null) {
       updateFields.push(`visibility_mode = $${paramCount}`)
       values.push(visibility_mode)
       paramCount++
     }
 
-    if (video_feed_enabled !== undefined) {
+    if (video_feed_enabled !== undefined && video_feed_enabled !== null) {
       updateFields.push(`video_feed_enabled = $${paramCount}`)
       values.push(video_feed_enabled)
       paramCount++
@@ -452,49 +432,19 @@ export async function updateDashboardSettings(
       paramCount++
     }
 
-    if (config_page_enabled !== undefined) {
+    if (config_page_enabled !== undefined && config_page_enabled !== null) {
       updateFields.push(`config_page_enabled = $${paramCount}`)
       values.push(config_page_enabled)
       paramCount++
     }
 
-    if (guestbook_enabled !== undefined) {
+    if (guestbook_enabled !== undefined && guestbook_enabled !== null) {
       updateFields.push(`guestbook_enabled = $${paramCount}`)
       values.push(guestbook_enabled)
       paramCount++
     }
 
-    if (streaming_music_file !== undefined) {
-      updateFields.push(`streaming_music_file = $${paramCount}`)
-      values.push(streaming_music_file)
-      paramCount++
-    }
-
-    if (streaming_music_enabled !== undefined) {
-      updateFields.push(`streaming_music_enabled = $${paramCount}`)
-      values.push(streaming_music_enabled)
-      paramCount++
-    }
-
-    if (streaming_music_loop !== undefined) {
-      updateFields.push(`streaming_music_loop = $${paramCount}`)
-      values.push(streaming_music_loop)
-      paramCount++
-    }
-
-    if (streaming_music_playlist !== undefined) {
-      updateFields.push(`streaming_music_playlist = $${paramCount}`)
-      values.push(streaming_music_playlist)
-      paramCount++
-    }
-
-    if (streaming_music_volume !== undefined) {
-      updateFields.push(`streaming_music_volume = $${paramCount}`)
-      values.push(streaming_music_volume)
-      paramCount++
-    }
-
-    if (streaming_title_enabled !== undefined) {
+    if (streaming_title_enabled !== undefined && streaming_title_enabled !== null) {
       updateFields.push(`streaming_title_enabled = $${paramCount}`)
       values.push(streaming_title_enabled)
       paramCount++
@@ -506,19 +456,19 @@ export async function updateDashboardSettings(
       paramCount++
     }
 
-    if (stream_camera_display_mode !== undefined) {
+    if (stream_camera_display_mode !== undefined && stream_camera_display_mode !== null) {
       updateFields.push(`stream_camera_display_mode = $${paramCount}`)
       values.push(stream_camera_display_mode)
       paramCount++
     }
 
-    if (horizontal_stream_camera_display_mode !== undefined) {
+    if (horizontal_stream_camera_display_mode !== undefined && horizontal_stream_camera_display_mode !== null) {
       updateFields.push(`horizontal_stream_camera_display_mode = $${paramCount}`)
       values.push(horizontal_stream_camera_display_mode)
       paramCount++
     }
 
-    if (vertical_stream_camera_display_mode !== undefined) {
+    if (vertical_stream_camera_display_mode !== undefined && vertical_stream_camera_display_mode !== null) {
       updateFields.push(`vertical_stream_camera_display_mode = $${paramCount}`)
       values.push(vertical_stream_camera_display_mode)
       paramCount++
