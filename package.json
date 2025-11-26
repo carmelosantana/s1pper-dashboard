@@ -11,6 +11,7 @@
     "db:reset": "./scripts/reset-database.sh",
     "db:cli": "node scripts/sql-runner.js",
     "db:migrate": "node scripts/migrate-streaming-title.js",
+    "db:migrate:offline-swap": "node scripts/migrate-add-offline-video-swap.js",
     "docker:build": "docker-compose build --no-cache",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",

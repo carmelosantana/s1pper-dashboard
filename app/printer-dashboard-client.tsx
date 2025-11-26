@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -270,12 +270,18 @@ export default function PrinterDashboardClient({
   const isPrinting = printerStatus.print.state === 'printing'
   const progress = Math.round(printerStatus.print.progress * 100)
 
-  // Format temperature data for the chart
-  const chartData = temperatureHistory ? temperatureHistory.timestamps.map((time, index) => ({
-    time,
-    extruder: temperatureHistory.extruder.temperatures[index] || 0,
-    bed: temperatureHistory.bed.temperatures[index] || 0
-  })) : []
+  // Format temperature data for the chart - memoized to prevent recreation
+  const chartData = useMemo(() => {
+    if (!temperatureHistory || !temperatureHistory.timestamps || temperatureHistory.timestamps.length === 0) {
+      return []
+    }
+    
+    return temperatureHistory.timestamps.map((time, index) => ({
+      time,
+      extruder: temperatureHistory.extruder.temperatures[index] || 0,
+      bed: temperatureHistory.bed.temperatures[index] || 0
+    }))
+  }, [temperatureHistory])
 
   return (
     <div className="dark min-h-screen bg-black text-foreground p-4 md:p-6">

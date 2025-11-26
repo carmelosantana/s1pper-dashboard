@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Camera, Grid3X3, PictureInPicture, WifiOff } from 'lucide-react'
 import { Button } from './ui/button'
 import { cn } from '@/lib/utils'
@@ -33,6 +33,37 @@ export function MultiCameraStream({
   const [selectedCameraIndex, setSelectedCameraIndex] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [cameraErrors, setCameraErrors] = useState<Record<string, boolean>>({})
+  const imageRefs = useRef<Map<string, HTMLImageElement>>(new Map())
+
+  // Cleanup function to clear image memory
+  const cleanupImage = useCallback((cameraUid: string) => {
+    const img = imageRefs.current.get(cameraUid)
+    if (img) {
+      // Stop loading the image
+      img.src = ''
+      imageRefs.current.delete(cameraUid)
+    }
+  }, [])
+
+  // Cleanup all images on unmount
+  useEffect(() => {
+    return () => {
+      imageRefs.current.forEach((img, uid) => {
+        img.src = ''
+      })
+      imageRefs.current.clear()
+    }
+  }, [])
+
+  // Cleanup unused camera images when cameras change
+  useEffect(() => {
+    const currentCameraUids = new Set(enabledCameras.map(c => c.uid))
+    imageRefs.current.forEach((img, uid) => {
+      if (!currentCameraUids.has(uid)) {
+        cleanupImage(uid)
+      }
+    })
+  }, [enabledCameras, cleanupImage])
 
   // Reset selected camera when cameras change
   useEffect(() => {
@@ -72,6 +103,12 @@ export function MultiCameraStream({
   // Handle camera selection with callback
   const handleCameraSelect = (index: number) => {
     if (index !== selectedCameraIndex && !isTransitioning) {
+      // Cleanup previous camera image to free memory
+      const previousCamera = enabledCameras[selectedCameraIndex]
+      if (previousCamera) {
+        cleanupImage(previousCamera.uid)
+      }
+      
       setIsTransitioning(true)
       setSelectedCameraIndex(index)
       onCameraSelect?.(enabledCameras[index].uid)
@@ -92,27 +129,36 @@ export function MultiCameraStream({
   }
 
   // Render camera image with error overlay
-  const renderCameraImage = (camera: CameraFeed, className?: string, includeKey = false) => (
-    <div className="relative w-full h-full">
-      <img
-        key={includeKey ? camera.uid : undefined}
-        src={`/api/camera/stream?uid=${camera.uid}`}
-        alt={`${camera.name} Stream`}
-        className={className}
-        style={{ imageRendering }}
-        onError={() => handleCameraError(camera.uid)}
-        onLoad={() => handleCameraLoad(camera.uid)}
-      />
-      {cameraErrors[camera.uid] && (
-        <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center">
-          <div className="text-center">
-            <WifiOff className="h-12 w-12 mx-auto mb-2 text-gray-500" />
-            <p className="text-gray-400 text-sm">No video feed</p>
+  const renderCameraImage = useCallback((camera: CameraFeed, className?: string, includeKey = false) => {
+    const handleImageRef = (img: HTMLImageElement | null) => {
+      if (img) {
+        imageRefs.current.set(camera.uid, img)
+      }
+    }
+
+    return (
+      <div className="relative w-full h-full">
+        <img
+          key={includeKey ? camera.uid : undefined}
+          ref={handleImageRef}
+          src={`/api/camera/stream?uid=${camera.uid}`}
+          alt={`${camera.name} Stream`}
+          className={className}
+          style={{ imageRendering }}
+          onError={() => handleCameraError(camera.uid)}
+          onLoad={() => handleCameraLoad(camera.uid)}
+        />
+        {cameraErrors[camera.uid] && (
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center">
+            <div className="text-center">
+              <WifiOff className="h-12 w-12 mx-auto mb-2 text-gray-500" />
+              <p className="text-gray-400 text-sm">No video feed</p>
+            </div>
           </div>
-        </div>
-      )}
-    </div>
-  )
+        )}
+      </div>
+    )
+  }, [cameraErrors, imageRendering])
 
   if (enabledCameras.length === 0) {
     return (

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -24,6 +24,15 @@ export function CameraComponent({ className, onPrintComplete = false }: CameraCo
   const [enabledWebcams, setEnabledWebcams] = useState<(WebcamConfig & { database_enabled?: boolean })[]>([]);
   const imgRef = useRef<HTMLImageElement>(null);
   const confettiRef = useRef<ConfettiRef>(null);
+
+  // Cleanup function for image memory
+  useEffect(() => {
+    return () => {
+      if (imgRef.current) {
+        imgRef.current.src = ''
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const fetchData = async () => {

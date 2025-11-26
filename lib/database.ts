@@ -155,9 +155,12 @@ export async function initializeDatabase(): Promise<void> {
         guestbook_enabled BOOLEAN NOT NULL DEFAULT true,
         streaming_title_enabled BOOLEAN NOT NULL DEFAULT true,
         selected_camera_uid VARCHAR(255),
-        stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (stream_camera_display_mode IN ('single', 'grid', 'pip')),
-        horizontal_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (horizontal_stream_camera_display_mode IN ('single', 'grid', 'pip')),
-        vertical_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (vertical_stream_camera_display_mode IN ('single', 'grid', 'pip')),
+        stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap')),
+        horizontal_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (horizontal_stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap')),
+        vertical_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (vertical_stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap')),
+        stream_pip_main_camera_uid VARCHAR(255),
+        horizontal_pip_main_camera_uid VARCHAR(255),
+        vertical_pip_main_camera_uid VARCHAR(255),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
