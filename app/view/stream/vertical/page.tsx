@@ -28,6 +28,8 @@ export default async function VerticalStreamPage() {
   const streamCameraDisplayMode = dashboardSettings?.vertical_stream_camera_display_mode ?? 
                                    dashboardSettings?.stream_camera_display_mode ?? 
                                    'single'
+  const rotationInterval = dashboardSettings?.rotation_interval ?? 60
+  const transitionEffect = dashboardSettings?.transition_effect ?? 'fade'
 
   // Fetch camera data and per-view settings
   let enabledCameras: any[] = []
@@ -73,6 +75,8 @@ export default async function VerticalStreamPage() {
         dashboardSubtitle={dashboardSubtitle}
         streamCameraDisplayMode={streamCameraDisplayMode}
         enabledCameras={enabledCameras}
+        rotationInterval={rotationInterval}
+        transitionEffect={transitionEffect}
       />
     </Suspense>
   )

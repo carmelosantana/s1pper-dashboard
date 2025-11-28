@@ -14,8 +14,10 @@ interface StreamViewClientProps {
   streamingTitleEnabled: boolean
   dashboardTitle: string
   dashboardSubtitle: string
-  streamCameraDisplayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  streamCameraDisplayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
   enabledCameras: Array<{ uid: string; name: string; enabled: boolean }>
+  rotationInterval?: number
+  transitionEffect?: 'fade' | 'slide' | 'zoom' | 'none'
 }
 
 function formatTime(seconds: number): string {
@@ -57,7 +59,9 @@ export default function StreamViewClient({
   dashboardTitle,
   dashboardSubtitle,
   streamCameraDisplayMode,
-  enabledCameras
+  enabledCameras,
+  rotationInterval = 60,
+  transitionEffect = 'fade'
 }: StreamViewClientProps) {
   const { printerStatus, temperatureHistory, isConnected } = usePrinterData()
   const [currentTime, setCurrentTime] = useState<Date>(new Date())
@@ -102,6 +106,8 @@ export default function StreamViewClient({
           enabledCameras={enabledCameras}
           imageRendering="auto"
           orientation="horizontal"
+          rotationInterval={rotationInterval}
+          transitionEffect={transitionEffect}
         />
       </div>
 

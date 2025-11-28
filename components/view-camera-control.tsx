@@ -16,10 +16,10 @@ interface ViewCameraControlProps {
   view: 'stream' | 'horizontal' | 'vertical'
   viewLabel: string
   viewPath: string
-  displayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  displayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
   pipMainCameraUid: string | null
   webcams: WebcamConfig[]
-  onDisplayModeChange: (mode: 'single' | 'grid' | 'pip' | 'offline_video_swap') => void
+  onDisplayModeChange: (mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate') => void
   onPipMainCameraChange: (cameraUid: string | null) => void
   getViewCameraEnabled: (cameraUid: string) => boolean
   onViewCameraEnabledChange: (cameraUid: string, enabled: boolean) => Promise<void>
@@ -56,7 +56,7 @@ export default function ViewCameraControl({
         <Label htmlFor={`${view}-display-mode`}>Display Mode</Label>
         <Select
           value={displayMode}
-          onValueChange={(value: 'single' | 'grid' | 'pip' | 'offline_video_swap') => onDisplayModeChange(value)}
+          onValueChange={(value: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate') => onDisplayModeChange(value)}
         >
           <SelectTrigger id={`${view}-display-mode`}>
             <SelectValue />
@@ -91,6 +91,14 @@ export default function ViewCameraControl({
                 <span className="font-medium">Offline Video Swap</span>
                 <span className="text-xs text-muted-foreground">
                   Auto-switch to next camera when feed goes offline
+                </span>
+              </div>
+            </SelectItem>
+            <SelectItem value="auto_rotate">
+              <div className="flex flex-col items-start">
+                <span className="font-medium">Auto Rotate</span>
+                <span className="text-xs text-muted-foreground">
+                  Automatically cycle through cameras with smooth transitions
                 </span>
               </div>
             </SelectItem>

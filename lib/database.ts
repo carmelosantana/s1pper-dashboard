@@ -155,12 +155,14 @@ export async function initializeDatabase(): Promise<void> {
         guestbook_enabled BOOLEAN NOT NULL DEFAULT true,
         streaming_title_enabled BOOLEAN NOT NULL DEFAULT true,
         selected_camera_uid VARCHAR(255),
-        stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap')),
-        horizontal_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (horizontal_stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap')),
-        vertical_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (vertical_stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap')),
+        stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate')),
+        horizontal_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (horizontal_stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate')),
+        vertical_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (vertical_stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate')),
         stream_pip_main_camera_uid VARCHAR(255),
         horizontal_pip_main_camera_uid VARCHAR(255),
         vertical_pip_main_camera_uid VARCHAR(255),
+        rotation_interval INTEGER DEFAULT 60 CHECK (rotation_interval >= 5 AND rotation_interval <= 300),
+        transition_effect VARCHAR(20) DEFAULT 'fade' CHECK (transition_effect IN ('fade', 'slide', 'zoom', 'none')),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
@@ -282,12 +284,14 @@ export interface DashboardSettings {
   guestbook_enabled: boolean
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
-  stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
-  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
-  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
+  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
+  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
   stream_pip_main_camera_uid: string | null
   horizontal_pip_main_camera_uid: string | null
   vertical_pip_main_camera_uid: string | null
+  rotation_interval: number
+  transition_effect: 'fade' | 'slide' | 'zoom' | 'none'
   created_at: string
   updated_at: string
 }
@@ -339,6 +343,8 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       stream_pip_main_camera_uid: null,
       horizontal_pip_main_camera_uid: null,
       vertical_pip_main_camera_uid: null,
+      rotation_interval: 60,
+      transition_effect: 'fade',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -370,6 +376,8 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       stream_pip_main_camera_uid: null,
       horizontal_pip_main_camera_uid: null,
       vertical_pip_main_camera_uid: null,
+      rotation_interval: 60,
+      transition_effect: 'fade',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -392,7 +400,9 @@ export async function updateDashboardSettings(
   vertical_stream_camera_display_mode?: 'single' | 'grid' | 'pip',
   stream_pip_main_camera_uid?: string | null,
   horizontal_pip_main_camera_uid?: string | null,
-  vertical_pip_main_camera_uid?: string | null
+  vertical_pip_main_camera_uid?: string | null,
+  rotation_interval?: number,
+  transition_effect?: 'fade' | 'slide' | 'zoom' | 'none'
 ): Promise<DashboardSettings | null> {
   if (!isDatabaseAvailable()) {
     console.warn('Cannot update dashboard settings: database not available')
@@ -492,6 +502,18 @@ export async function updateDashboardSettings(
     if (vertical_pip_main_camera_uid !== undefined) {
       updateFields.push(`vertical_pip_main_camera_uid = $${paramCount}`)
       values.push(vertical_pip_main_camera_uid)
+      paramCount++
+    }
+
+    if (rotation_interval !== undefined && rotation_interval !== null) {
+      updateFields.push(`rotation_interval = $${paramCount}`)
+      values.push(rotation_interval)
+      paramCount++
+    }
+
+    if (transition_effect !== undefined && transition_effect !== null) {
+      updateFields.push(`transition_effect = $${paramCount}`)
+      values.push(transition_effect)
       paramCount++
     }
 

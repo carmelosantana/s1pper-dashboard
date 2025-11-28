@@ -76,6 +76,8 @@ export async function GET(request: NextRequest) {
       stream_pip_main_camera_uid: settings.stream_pip_main_camera_uid || null,
       horizontal_pip_main_camera_uid: settings.horizontal_pip_main_camera_uid || null,
       vertical_pip_main_camera_uid: settings.vertical_pip_main_camera_uid || null,
+      rotation_interval: settings.rotation_interval || 60,
+      transition_effect: settings.transition_effect || 'fade',
       updated_at: settings.updated_at
     })
   } catch (error) {
@@ -121,7 +123,9 @@ export async function PUT(request: NextRequest) {
       vertical_stream_camera_display_mode,
       stream_pip_main_camera_uid,
       horizontal_pip_main_camera_uid,
-      vertical_pip_main_camera_uid
+      vertical_pip_main_camera_uid,
+      rotation_interval,
+      transition_effect
     } = body
 
     if (visibility_mode && !['offline', 'private', 'public'].includes(visibility_mode)) {
@@ -159,23 +163,37 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    if (stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(stream_camera_display_mode)) {
+    if (stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate'].includes(stream_camera_display_mode)) {
       return NextResponse.json(
-        { error: 'Invalid stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
+        { error: 'Invalid stream_camera_display_mode. Must be single, grid, pip, offline_video_swap, or auto_rotate' },
         { status: 400 }
       )
     }
 
-    if (horizontal_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(horizontal_stream_camera_display_mode)) {
+    if (horizontal_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate'].includes(horizontal_stream_camera_display_mode)) {
       return NextResponse.json(
-        { error: 'Invalid horizontal_stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
+        { error: 'Invalid horizontal_stream_camera_display_mode. Must be single, grid, pip, offline_video_swap, or auto_rotate' },
         { status: 400 }
       )
     }
 
-    if (vertical_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(vertical_stream_camera_display_mode)) {
+    if (vertical_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate'].includes(vertical_stream_camera_display_mode)) {
       return NextResponse.json(
-        { error: 'Invalid vertical_stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
+        { error: 'Invalid vertical_stream_camera_display_mode. Must be single, grid, pip, offline_video_swap, or auto_rotate' },
+        { status: 400 }
+      )
+    }
+
+    if (rotation_interval !== undefined && (typeof rotation_interval !== 'number' || rotation_interval < 5 || rotation_interval > 300)) {
+      return NextResponse.json(
+        { error: 'Invalid rotation_interval. Must be a number between 5 and 300' },
+        { status: 400 }
+      )
+    }
+
+    if (transition_effect && !['fade', 'slide', 'zoom', 'none'].includes(transition_effect)) {
+      return NextResponse.json(
+        { error: 'Invalid transition_effect. Must be fade, slide, zoom, or none' },
         { status: 400 }
       )
     }
@@ -196,7 +214,9 @@ export async function PUT(request: NextRequest) {
       vertical_stream_camera_display_mode,
       stream_pip_main_camera_uid,
       horizontal_pip_main_camera_uid,
-      vertical_pip_main_camera_uid
+      vertical_pip_main_camera_uid,
+      rotation_interval,
+      transition_effect
     )
     
     if (!updatedSettings) {
@@ -222,6 +242,8 @@ export async function PUT(request: NextRequest) {
       stream_pip_main_camera_uid: updatedSettings.stream_pip_main_camera_uid || null,
       horizontal_pip_main_camera_uid: updatedSettings.horizontal_pip_main_camera_uid || null,
       vertical_pip_main_camera_uid: updatedSettings.vertical_pip_main_camera_uid || null,
+      rotation_interval: updatedSettings.rotation_interval || 60,
+      transition_effect: updatedSettings.transition_effect || 'fade',
       updated_at: updatedSettings.updated_at
     })
 

@@ -40,12 +40,14 @@ interface DashboardSettings {
   guestbook_enabled: boolean
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
-  stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
-  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
-  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
+  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
+  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
   stream_pip_main_camera_uid: string | null
   horizontal_pip_main_camera_uid: string | null
   vertical_pip_main_camera_uid: string | null
+  rotation_interval: number
+  transition_effect: 'fade' | 'slide' | 'zoom' | 'none'
 }
 
 interface WebcamConfig {
@@ -720,6 +722,62 @@ export default function SettingsCard() {
                       checked={settings.streaming_title_enabled}
                       onCheckedChange={(checked) => updateSettings({ streaming_title_enabled: checked })}
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* Auto-Rotate Settings */}
+              <div className="border-t border-zinc-800 pt-4">
+                <h3 className="text-sm font-semibold mb-3">Auto-Rotate Settings</h3>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Configure automatic camera rotation interval and transition effects
+                </p>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="rotation-interval">
+                      Rotation Interval (seconds)
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      How long to display each camera before switching (5-300 seconds)
+                    </p>
+                    <Input
+                      id="rotation-interval"
+                      type="number"
+                      min={5}
+                      max={300}
+                      value={settings.rotation_interval}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value)
+                        if (value >= 5 && value <= 300) {
+                          updateSettings({ rotation_interval: value })
+                        }
+                      }}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="transition-effect">
+                      Transition Effect
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Visual effect when switching between cameras
+                    </p>
+                    <Select
+                      value={settings.transition_effect}
+                      onValueChange={(value: 'fade' | 'slide' | 'zoom' | 'none') => 
+                        updateSettings({ transition_effect: value })
+                      }
+                    >
+                      <SelectTrigger id="transition-effect">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fade">Fade</SelectItem>
+                        <SelectItem value="slide">Slide</SelectItem>
+                        <SelectItem value="zoom">Zoom</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>

@@ -14,8 +14,10 @@ interface VerticalStreamClientProps {
   streamingTitleEnabled: boolean
   dashboardTitle: string
   dashboardSubtitle: string
-  streamCameraDisplayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  streamCameraDisplayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
   enabledCameras: Array<{ uid: string; name: string; enabled: boolean }>
+  rotationInterval?: number
+  transitionEffect?: 'fade' | 'slide' | 'zoom' | 'none'
 }
 
 function formatTime(seconds: number): string {
@@ -57,7 +59,9 @@ export default function VerticalStreamClient({
   dashboardTitle,
   dashboardSubtitle,
   streamCameraDisplayMode,
-  enabledCameras
+  enabledCameras,
+  rotationInterval = 60,
+  transitionEffect = 'fade'
 }: VerticalStreamClientProps) {
   const { printerStatus, temperatureHistory, isConnected } = usePrinterData()
   const [scrollPosition, setScrollPosition] = useState(0)
@@ -258,6 +262,8 @@ export default function VerticalStreamClient({
           imageRendering="auto"
           orientation="vertical"
           disableInteraction={true}
+          rotationInterval={rotationInterval}
+          transitionEffect={transitionEffect}
         />
 
         {/* Gradient overlays */}

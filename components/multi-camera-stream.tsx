@@ -13,12 +13,14 @@ interface CameraFeed {
 
 interface MultiCameraStreamProps {
   className?: string
-  displayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  displayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
   enabledCameras: CameraFeed[]
   onCameraSelect?: (uid: string) => void
   imageRendering?: 'auto' | 'crisp-edges' | 'pixelated'
   orientation?: 'horizontal' | 'vertical'
   disableInteraction?: boolean
+  rotationInterval?: number  // in seconds
+  transitionEffect?: 'fade' | 'slide' | 'zoom' | 'none'
 }
 
 export function MultiCameraStream({
@@ -28,12 +30,15 @@ export function MultiCameraStream({
   onCameraSelect,
   imageRendering = 'auto',
   orientation = 'horizontal',
-  disableInteraction = false
+  disableInteraction = false,
+  rotationInterval = 60,
+  transitionEffect = 'fade'
 }: MultiCameraStreamProps) {
   const [selectedCameraIndex, setSelectedCameraIndex] = useState(0)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [cameraErrors, setCameraErrors] = useState<Record<string, boolean>>({})
   const imageRefs = useRef<Map<string, HTMLImageElement>>(new Map())
+  const rotationTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Cleanup function to clear image memory
   const cleanupImage = useCallback((cameraUid: string) => {
@@ -52,6 +57,11 @@ export function MultiCameraStream({
         img.src = ''
       })
       imageRefs.current.clear()
+      // Cleanup rotation timer
+      if (rotationTimerRef.current) {
+        clearInterval(rotationTimerRef.current)
+        rotationTimerRef.current = null
+      }
     }
   }, [])
 
@@ -99,6 +109,42 @@ export function MultiCameraStream({
       attempts++
     }
   }, [cameraErrors, selectedCameraIndex, enabledCameras, displayMode, onCameraSelect])
+
+  // Auto-rotate timer for automatic camera cycling
+  useEffect(() => {
+    if (displayMode !== 'auto_rotate' || enabledCameras.length <= 1) {
+      // Clear timer if mode changed or only one camera
+      if (rotationTimerRef.current) {
+        clearInterval(rotationTimerRef.current)
+        rotationTimerRef.current = null
+      }
+      return
+    }
+
+    // Start rotation timer
+    rotationTimerRef.current = setInterval(() => {
+      setSelectedCameraIndex((prevIndex) => {
+        const nextIndex = (prevIndex + 1) % enabledCameras.length
+        const nextCamera = enabledCameras[nextIndex]
+        
+        // Trigger transition effect
+        setIsTransitioning(true)
+        setTimeout(() => setIsTransitioning(false), 300)
+        
+        // Callback for new camera
+        onCameraSelect?.(nextCamera.uid)
+        return nextIndex
+      })
+    }, rotationInterval * 1000) // Convert seconds to milliseconds
+
+    // Cleanup timer on unmount or dependency change
+    return () => {
+      if (rotationTimerRef.current) {
+        clearInterval(rotationTimerRef.current)
+        rotationTimerRef.current = null
+      }
+    }
+  }, [displayMode, enabledCameras, rotationInterval, onCameraSelect])
 
   // Handle camera selection with callback
   const handleCameraSelect = (index: number) => {
@@ -175,23 +221,42 @@ export function MultiCameraStream({
   }
 
   // Single camera view
-  if (displayMode === 'single') {
+  if (displayMode === 'single' || displayMode === 'auto_rotate') {
+    // GPU-accelerated transition classes
+    const getTransitionClasses = () => {
+      const baseClasses = "w-full h-full object-cover rounded-lg will-change-transform"
+      
+      if (!isTransitioning) {
+        return `${baseClasses} opacity-100 scale-100 translate-x-0`
+      }
+
+      // Apply transition effect
+      switch (transitionEffect) {
+        case 'fade':
+          return `${baseClasses} opacity-0 transition-opacity duration-300`
+        case 'slide':
+          return `${baseClasses} -translate-x-full opacity-0 transition-all duration-300`
+        case 'zoom':
+          return `${baseClasses} scale-75 opacity-0 transition-all duration-300`
+        case 'none':
+        default:
+          return baseClasses
+      }
+    }
+
     return (
       <div className={cn("relative", className)}>
         {/* Main camera feed */}
-        <div className="relative w-full h-full">
+        <div className="relative w-full h-full overflow-hidden">
           {renderCameraImage(
             enabledCameras[selectedCameraIndex],
-            cn(
-              "w-full h-full object-cover rounded-lg transition-opacity duration-300",
-              isTransitioning ? "opacity-0" : "opacity-100"
-            ),
+            getTransitionClasses(),
             true // Include key for transition
           )}
         </div>
 
         {/* Camera switcher - Only show if multiple cameras and interaction is enabled */}
-        {enabledCameras.length > 1 && !disableInteraction && (
+        {enabledCameras.length > 1 && !disableInteraction && displayMode === 'single' && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-black/70 backdrop-blur-md rounded-full px-4 py-2">
             {enabledCameras.map((camera, index) => (
               <Button
