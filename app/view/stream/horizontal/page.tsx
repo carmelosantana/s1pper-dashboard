@@ -19,12 +19,6 @@ export default async function HorizontalStreamPage() {
   const { status, temperatureHistory } = await fetchPrinterData()
   const dashboardSettings = await getDashboardSettings()
 
-  // Extract music settings with fallbacks
-  const musicEnabled = dashboardSettings?.streaming_music_enabled ?? false
-  const musicVolume = dashboardSettings?.streaming_music_volume ?? 50
-  const musicPlaylist = dashboardSettings?.streaming_music_playlist ?? []
-  const musicLoop = dashboardSettings?.streaming_music_loop ?? false
-
   // Extract title/subtitle settings with fallbacks
   const streamingTitleEnabled = dashboardSettings?.streaming_title_enabled ?? true
   const dashboardTitle = dashboardSettings?.dashboard_title ?? "s1pper's Dashboard"
@@ -34,6 +28,8 @@ export default async function HorizontalStreamPage() {
   const streamCameraDisplayMode = dashboardSettings?.horizontal_stream_camera_display_mode ?? 
                                    dashboardSettings?.stream_camera_display_mode ?? 
                                    'single'
+  const rotationInterval = dashboardSettings?.rotation_interval ?? 60
+  const transitionEffect = dashboardSettings?.transition_effect ?? 'fade'
 
   // Fetch camera data and per-view settings
   let enabledCameras: any[] = []
@@ -74,15 +70,13 @@ export default async function HorizontalStreamPage() {
       <StreamViewClient 
         initialStatus={status} 
         initialTemperatureHistory={temperatureHistory}
-        musicEnabled={musicEnabled}
-        musicVolume={musicVolume}
-        musicPlaylist={musicPlaylist}
-        musicLoop={musicLoop}
         streamingTitleEnabled={streamingTitleEnabled}
         dashboardTitle={dashboardTitle}
         dashboardSubtitle={dashboardSubtitle}
         streamCameraDisplayMode={streamCameraDisplayMode}
         enabledCameras={enabledCameras}
+        rotationInterval={rotationInterval}
+        transitionEffect={transitionEffect}
       />
     </Suspense>
   )

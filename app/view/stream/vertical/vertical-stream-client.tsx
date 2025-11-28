@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Activity, Thermometer, Clock, Zap, Layers } from 'lucide-react'
 import { FaviconManager } from '@/components/favicon-manager'
-import { StreamMusicPlayer } from '@/components/stream-music-player'
 import { MultiCameraStream } from '@/components/multi-camera-stream'
 import { usePrinterData } from '@/lib/hooks/use-printer-data'
 import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
@@ -12,15 +11,13 @@ import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
 interface VerticalStreamClientProps {
   initialStatus: PrinterStatus | null
   initialTemperatureHistory: TemperatureHistory | null
-  musicEnabled: boolean
-  musicVolume: number
-  musicPlaylist: string[]
-  musicLoop: boolean
   streamingTitleEnabled: boolean
   dashboardTitle: string
   dashboardSubtitle: string
-  streamCameraDisplayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  streamCameraDisplayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
   enabledCameras: Array<{ uid: string; name: string; enabled: boolean }>
+  rotationInterval?: number
+  transitionEffect?: 'fade' | 'slide' | 'zoom' | 'none'
 }
 
 function formatTime(seconds: number): string {
@@ -58,15 +55,13 @@ function formatFinishTime(estimatedTimeLeft: number): string {
 export default function VerticalStreamClient({ 
   initialStatus, 
   initialTemperatureHistory,
-  musicEnabled,
-  musicVolume,
-  musicPlaylist,
-  musicLoop,
   streamingTitleEnabled,
   dashboardTitle,
   dashboardSubtitle,
   streamCameraDisplayMode,
-  enabledCameras
+  enabledCameras,
+  rotationInterval = 60,
+  transitionEffect = 'fade'
 }: VerticalStreamClientProps) {
   const { printerStatus, temperatureHistory, isConnected } = usePrinterData()
   const [scrollPosition, setScrollPosition] = useState(0)
@@ -122,13 +117,6 @@ export default function VerticalStreamClient({
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <FaviconManager status="offline" />
-        {/* Keep music playing even when disconnected */}
-        <StreamMusicPlayer 
-          enabled={musicEnabled}
-          volume={musicVolume}
-          playlist={musicPlaylist}
-          loop={musicLoop}
-        />
         <div className="text-center">
           <Activity className="h-16 w-16 mx-auto mb-4 text-gray-500" />
           <h1 className="text-2xl font-bold mb-2">Printer Disconnected</h1>
@@ -265,14 +253,6 @@ export default function VerticalStreamClient({
     <div className="relative min-h-screen w-screen bg-black overflow-hidden" style={{ maxWidth: '1080px', margin: '0 auto' }}>
       <FaviconManager status={printerStatus.print.state} />
       
-      {/* Stream music player */}
-      <StreamMusicPlayer 
-        enabled={musicEnabled}
-        volume={musicVolume}
-        playlist={musicPlaylist}
-        loop={musicLoop}
-      />
-      
       {/* Full screen video feed - Portrait aspect ratio */}
       <div className="relative h-screen">
         <MultiCameraStream
@@ -282,6 +262,8 @@ export default function VerticalStreamClient({
           imageRendering="auto"
           orientation="vertical"
           disableInteraction={true}
+          rotationInterval={rotationInterval}
+          transitionEffect={transitionEffect}
         />
 
         {/* Gradient overlays */}

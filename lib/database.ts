@@ -124,6 +124,25 @@ export async function initializeDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_guestbook_created_at ON guestbook_entries(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_guestbook_printer_status ON guestbook_entries(printer_status);
 
+      CREATE TABLE IF NOT EXISTS module_settings (
+        id SERIAL PRIMARY KEY,
+        module_id VARCHAR(255) NOT NULL UNIQUE,
+        enabled BOOLEAN DEFAULT false,
+        position VARCHAR(50) DEFAULT 'main',
+        display_order INTEGER DEFAULT 0,
+        settings JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_module_settings_enabled ON module_settings(enabled);
+      CREATE INDEX IF NOT EXISTS idx_module_settings_position ON module_settings(position);
+      CREATE INDEX IF NOT EXISTS idx_module_settings_order ON module_settings(display_order);
+
+      INSERT INTO module_settings (module_id, enabled, position, display_order, settings)
+      VALUES ('grow-tent', false, 'main', 0, '{"apiUrl": "http://localhost:3000", "refreshInterval": 30000, "showControls": true, "compactView": false}'::jsonb)
+      ON CONFLICT (module_id) DO NOTHING;
+
       CREATE TABLE IF NOT EXISTS dashboard_settings (
         id SERIAL PRIMARY KEY,
         visibility_mode VARCHAR(20) NOT NULL DEFAULT 'public' CHECK (visibility_mode IN ('offline', 'private', 'public')),
@@ -134,18 +153,16 @@ export async function initializeDatabase(): Promise<void> {
         dashboard_icon_url TEXT,
         config_page_enabled BOOLEAN NOT NULL DEFAULT true,
         guestbook_enabled BOOLEAN NOT NULL DEFAULT true,
-        streaming_music_file VARCHAR(255),
-        streaming_music_enabled BOOLEAN NOT NULL DEFAULT false,
-        streaming_music_loop BOOLEAN NOT NULL DEFAULT true,
-        streaming_music_volume INTEGER NOT NULL DEFAULT 50 CHECK (streaming_music_volume >= 0 AND streaming_music_volume <= 100),
-        streaming_music_playlist TEXT[] DEFAULT '{}',
-        streaming_music_crossfade_enabled BOOLEAN NOT NULL DEFAULT false,
-        streaming_music_crossfade_duration NUMERIC(3,1) NOT NULL DEFAULT 3.0 CHECK (streaming_music_crossfade_duration >= 0 AND streaming_music_crossfade_duration <= 10),
         streaming_title_enabled BOOLEAN NOT NULL DEFAULT true,
         selected_camera_uid VARCHAR(255),
-        stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (stream_camera_display_mode IN ('single', 'grid', 'pip')),
-        horizontal_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (horizontal_stream_camera_display_mode IN ('single', 'grid', 'pip')),
-        vertical_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (vertical_stream_camera_display_mode IN ('single', 'grid', 'pip')),
+        stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate')),
+        horizontal_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (horizontal_stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate')),
+        vertical_stream_camera_display_mode VARCHAR(20) NOT NULL DEFAULT 'single' CHECK (vertical_stream_camera_display_mode IN ('single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate')),
+        stream_pip_main_camera_uid VARCHAR(255),
+        horizontal_pip_main_camera_uid VARCHAR(255),
+        vertical_pip_main_camera_uid VARCHAR(255),
+        rotation_interval INTEGER DEFAULT 60 CHECK (rotation_interval >= 5 AND rotation_interval <= 300),
+        transition_effect VARCHAR(20) DEFAULT 'fade' CHECK (transition_effect IN ('fade', 'slide', 'zoom', 'none')),
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
@@ -157,11 +174,9 @@ export async function initializeDatabase(): Promise<void> {
         dashboard_title, 
         dashboard_subtitle,
         config_page_enabled,
-        guestbook_enabled,
-        streaming_music_enabled,
-        streaming_music_loop
+        guestbook_enabled
       )
-      SELECT 'public', true, 's1pper''s Dashboard', 'A dashboard for s1pper, the Ender 3 S1 Pro', true, true, false, true
+      SELECT 'public', true, 's1pper''s Dashboard', 'A dashboard for s1pper, the Ender 3 S1 Pro', true, true
       WHERE NOT EXISTS (SELECT 1 FROM dashboard_settings);
 
       CREATE INDEX IF NOT EXISTS idx_dashboard_settings_visibility ON dashboard_settings(visibility_mode);
@@ -267,19 +282,16 @@ export interface DashboardSettings {
   dashboard_icon_url: string | null
   config_page_enabled: boolean
   guestbook_enabled: boolean
-  streaming_music_file: string | null
-  streaming_music_enabled: boolean
-  streaming_music_loop: boolean
-  streaming_music_volume: number
-  streaming_music_playlist: string[]
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
-  stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
-  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
-  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
+  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
+  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
   stream_pip_main_camera_uid: string | null
   horizontal_pip_main_camera_uid: string | null
   vertical_pip_main_camera_uid: string | null
+  rotation_interval: number
+  transition_effect: 'fade' | 'slide' | 'zoom' | 'none'
   created_at: string
   updated_at: string
 }
@@ -295,6 +307,21 @@ export interface ViewCameraSettings {
   updated_at: string
 }
 
+/**
+ * Module Settings Interface
+ */
+export interface ModuleSettings {
+  id: number
+  module_id: string
+  enabled: boolean
+  position: 'main' | 'sidebar' | 'bottom' | 'floating'
+  display_order: number
+  settings: any // JSONB column
+  created_at: string
+  updated_at: string
+}
+
+
 // Get current dashboard settings
 export async function getDashboardSettings(): Promise<DashboardSettings | null> {
   if (!isDatabaseAvailable()) {
@@ -308,16 +335,16 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       dashboard_icon_url: null,
       config_page_enabled: true,
       guestbook_enabled: true,
-      streaming_music_file: null,
-      streaming_music_enabled: false,
-      streaming_music_loop: true,
-      streaming_music_volume: 50,
-      streaming_music_playlist: [],
       streaming_title_enabled: true,
       selected_camera_uid: null,
       stream_camera_display_mode: 'single',
       horizontal_stream_camera_display_mode: 'single',
       vertical_stream_camera_display_mode: 'single',
+      stream_pip_main_camera_uid: null,
+      horizontal_pip_main_camera_uid: null,
+      vertical_pip_main_camera_uid: null,
+      rotation_interval: 60,
+      transition_effect: 'fade',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
@@ -341,13 +368,16 @@ export async function getDashboardSettings(): Promise<DashboardSettings | null> 
       dashboard_icon_url: null,
       config_page_enabled: true,
       guestbook_enabled: true,
-      streaming_music_file: null,
-      streaming_music_enabled: false,
-      streaming_music_loop: true,
-      streaming_music_volume: 50,
-      streaming_music_playlist: [],
       streaming_title_enabled: true,
       selected_camera_uid: null,
+      stream_camera_display_mode: 'single',
+      horizontal_stream_camera_display_mode: 'single',
+      vertical_stream_camera_display_mode: 'single',
+      stream_pip_main_camera_uid: null,
+      horizontal_pip_main_camera_uid: null,
+      vertical_pip_main_camera_uid: null,
+      rotation_interval: 60,
+      transition_effect: 'fade',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -363,11 +393,6 @@ export async function updateDashboardSettings(
   dashboard_icon_url?: string | null,
   config_page_enabled?: boolean,
   guestbook_enabled?: boolean,
-  streaming_music_file?: string | null,
-  streaming_music_enabled?: boolean,
-  streaming_music_loop?: boolean,
-  streaming_music_playlist?: string[],
-  streaming_music_volume?: number,
   streaming_title_enabled?: boolean,
   selected_camera_uid?: string | null,
   stream_camera_display_mode?: 'single' | 'grid' | 'pip',
@@ -375,7 +400,9 @@ export async function updateDashboardSettings(
   vertical_stream_camera_display_mode?: 'single' | 'grid' | 'pip',
   stream_pip_main_camera_uid?: string | null,
   horizontal_pip_main_camera_uid?: string | null,
-  vertical_pip_main_camera_uid?: string | null
+  vertical_pip_main_camera_uid?: string | null,
+  rotation_interval?: number,
+  transition_effect?: 'fade' | 'slide' | 'zoom' | 'none'
 ): Promise<DashboardSettings | null> {
   if (!isDatabaseAvailable()) {
     console.warn('Cannot update dashboard settings: database not available')
@@ -388,13 +415,13 @@ export async function updateDashboardSettings(
     const values: any[] = []
     let paramCount = 1
 
-    if (visibility_mode !== undefined) {
+    if (visibility_mode !== undefined && visibility_mode !== null) {
       updateFields.push(`visibility_mode = $${paramCount}`)
       values.push(visibility_mode)
       paramCount++
     }
 
-    if (video_feed_enabled !== undefined) {
+    if (video_feed_enabled !== undefined && video_feed_enabled !== null) {
       updateFields.push(`video_feed_enabled = $${paramCount}`)
       values.push(video_feed_enabled)
       paramCount++
@@ -418,49 +445,19 @@ export async function updateDashboardSettings(
       paramCount++
     }
 
-    if (config_page_enabled !== undefined) {
+    if (config_page_enabled !== undefined && config_page_enabled !== null) {
       updateFields.push(`config_page_enabled = $${paramCount}`)
       values.push(config_page_enabled)
       paramCount++
     }
 
-    if (guestbook_enabled !== undefined) {
+    if (guestbook_enabled !== undefined && guestbook_enabled !== null) {
       updateFields.push(`guestbook_enabled = $${paramCount}`)
       values.push(guestbook_enabled)
       paramCount++
     }
 
-    if (streaming_music_file !== undefined) {
-      updateFields.push(`streaming_music_file = $${paramCount}`)
-      values.push(streaming_music_file)
-      paramCount++
-    }
-
-    if (streaming_music_enabled !== undefined) {
-      updateFields.push(`streaming_music_enabled = $${paramCount}`)
-      values.push(streaming_music_enabled)
-      paramCount++
-    }
-
-    if (streaming_music_loop !== undefined) {
-      updateFields.push(`streaming_music_loop = $${paramCount}`)
-      values.push(streaming_music_loop)
-      paramCount++
-    }
-
-    if (streaming_music_playlist !== undefined) {
-      updateFields.push(`streaming_music_playlist = $${paramCount}`)
-      values.push(streaming_music_playlist)
-      paramCount++
-    }
-
-    if (streaming_music_volume !== undefined) {
-      updateFields.push(`streaming_music_volume = $${paramCount}`)
-      values.push(streaming_music_volume)
-      paramCount++
-    }
-
-    if (streaming_title_enabled !== undefined) {
+    if (streaming_title_enabled !== undefined && streaming_title_enabled !== null) {
       updateFields.push(`streaming_title_enabled = $${paramCount}`)
       values.push(streaming_title_enabled)
       paramCount++
@@ -472,19 +469,19 @@ export async function updateDashboardSettings(
       paramCount++
     }
 
-    if (stream_camera_display_mode !== undefined) {
+    if (stream_camera_display_mode !== undefined && stream_camera_display_mode !== null) {
       updateFields.push(`stream_camera_display_mode = $${paramCount}`)
       values.push(stream_camera_display_mode)
       paramCount++
     }
 
-    if (horizontal_stream_camera_display_mode !== undefined) {
+    if (horizontal_stream_camera_display_mode !== undefined && horizontal_stream_camera_display_mode !== null) {
       updateFields.push(`horizontal_stream_camera_display_mode = $${paramCount}`)
       values.push(horizontal_stream_camera_display_mode)
       paramCount++
     }
 
-    if (vertical_stream_camera_display_mode !== undefined) {
+    if (vertical_stream_camera_display_mode !== undefined && vertical_stream_camera_display_mode !== null) {
       updateFields.push(`vertical_stream_camera_display_mode = $${paramCount}`)
       values.push(vertical_stream_camera_display_mode)
       paramCount++
@@ -505,6 +502,18 @@ export async function updateDashboardSettings(
     if (vertical_pip_main_camera_uid !== undefined) {
       updateFields.push(`vertical_pip_main_camera_uid = $${paramCount}`)
       values.push(vertical_pip_main_camera_uid)
+      paramCount++
+    }
+
+    if (rotation_interval !== undefined && rotation_interval !== null) {
+      updateFields.push(`rotation_interval = $${paramCount}`)
+      values.push(rotation_interval)
+      paramCount++
+    }
+
+    if (transition_effect !== undefined && transition_effect !== null) {
+      updateFields.push(`transition_effect = $${paramCount}`)
+      values.push(transition_effect)
       paramCount++
     }
 
@@ -690,6 +699,160 @@ export async function updateViewCameraEnabled(viewName: 'stream' | 'horizontal' 
     return results[0] || null
   } catch (error) {
     console.error('Error updating view camera enabled state:', error)
+    return null
+  }
+}
+
+/**
+ * Module Settings Functions
+ */
+
+/**
+ * Get all module settings
+ */
+export async function getAllModuleSettings(): Promise<ModuleSettings[]> {
+  if (!isDatabaseAvailable()) {
+    return []
+  }
+
+  try {
+    const results = await query<ModuleSettings>(
+      'SELECT * FROM module_settings ORDER BY display_order, module_id'
+    )
+    return results
+  } catch (error) {
+    console.error('Error fetching module settings:', error)
+    return []
+  }
+}
+
+/**
+ * Get settings for a specific module
+ */
+export async function getModuleSettings(moduleId: string): Promise<ModuleSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const results = await query<ModuleSettings>(
+      'SELECT * FROM module_settings WHERE module_id = $1',
+      [moduleId]
+    )
+    return results[0] || null
+  } catch (error) {
+    console.error('Error fetching module settings:', error)
+    return null
+  }
+}
+
+/**
+ * Get all enabled modules
+ */
+export async function getEnabledModules(): Promise<ModuleSettings[]> {
+  if (!isDatabaseAvailable()) {
+    return []
+  }
+
+  try {
+    const results = await query<ModuleSettings>(
+      'SELECT * FROM module_settings WHERE enabled = true ORDER BY display_order, module_id'
+    )
+    return results
+  } catch (error) {
+    console.error('Error fetching enabled modules:', error)
+    return []
+  }
+}
+
+/**
+ * Update module settings
+ */
+export async function updateModuleSettings(
+  moduleId: string,
+  updates: Partial<Omit<ModuleSettings, 'id' | 'module_id' | 'created_at' | 'updated_at'>>
+): Promise<ModuleSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const setClauses: string[] = []
+    const values: any[] = [moduleId]
+    let paramIndex = 2
+
+    if (updates.enabled !== undefined) {
+      setClauses.push(`enabled = $${paramIndex++}`)
+      values.push(updates.enabled)
+    }
+
+    if (updates.position !== undefined) {
+      setClauses.push(`position = $${paramIndex++}`)
+      values.push(updates.position)
+    }
+
+    if (updates.display_order !== undefined) {
+      setClauses.push(`display_order = $${paramIndex++}`)
+      values.push(updates.display_order)
+    }
+
+    if (updates.settings !== undefined) {
+      setClauses.push(`settings = $${paramIndex++}`)
+      values.push(JSON.stringify(updates.settings))
+    }
+
+    if (setClauses.length === 0) {
+      return await getModuleSettings(moduleId)
+    }
+
+    setClauses.push('updated_at = CURRENT_TIMESTAMP')
+
+    const results = await query<ModuleSettings>(
+      `UPDATE module_settings 
+       SET ${setClauses.join(', ')}
+       WHERE module_id = $1
+       RETURNING *`,
+      values
+    )
+
+    return results[0] || null
+  } catch (error) {
+    console.error('Error updating module settings:', error)
+    return null
+  }
+}
+
+/**
+ * Upsert module settings (create if not exists, update if exists)
+ */
+export async function upsertModuleSettings(
+  moduleId: string,
+  enabled: boolean,
+  position: 'main' | 'sidebar' | 'bottom' | 'floating',
+  displayOrder: number,
+  settings: any
+): Promise<ModuleSettings | null> {
+  if (!isDatabaseAvailable()) {
+    return null
+  }
+
+  try {
+    const results = await query<ModuleSettings>(
+      `INSERT INTO module_settings (module_id, enabled, position, display_order, settings)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (module_id)
+       DO UPDATE SET 
+         enabled = $2,
+         position = $3,
+         display_order = $4,
+         settings = $5,
+         updated_at = CURRENT_TIMESTAMP
+       RETURNING *`,
+      [moduleId, enabled, position, displayOrder, JSON.stringify(settings)]
+    )
+    return results[0] || null
+  } catch (error) {
+    console.error('Error upserting module settings:', error)
     return null
   }
 }

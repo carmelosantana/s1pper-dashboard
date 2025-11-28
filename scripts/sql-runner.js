@@ -238,9 +238,6 @@ async function handleRestore(trimmed) {
               dashboard_icon_url = NULL,
               config_page_enabled = true,
               guestbook_enabled = true,
-              streaming_music_file = NULL,
-              streaming_music_enabled = false,
-              streaming_music_loop = true,
               updated_at = CURRENT_TIMESTAMP
             WHERE id = (SELECT id FROM dashboard_settings ORDER BY id DESC LIMIT 1)
           `)

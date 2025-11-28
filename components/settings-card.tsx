@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
-import { AlertCircle, Settings as SettingsIcon, Cpu, Layout, Radio, Upload, Trash2, Loader2, CheckCircle2, XCircle, Save, RotateCcw, Volume2, Camera } from 'lucide-react'
+import { AlertCircle, Settings as SettingsIcon, Cpu, Layout, Radio, Upload, Trash2, Loader2, CheckCircle2, XCircle, Save, RotateCcw, Volume2, Camera, Grid2X2 } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Slider } from '@/components/ui/slider'
 import { isDevelopment } from '@/lib/utils/environment'
@@ -28,6 +28,7 @@ import { toast } from 'sonner'
 import { trackEvent } from '@/components/umami-analytics'
 import ViewCameraControl from '@/components/view-camera-control'
 import { useWebSocket } from '@/lib/contexts/websocket-context'
+import { ModulesSettings } from '@/components/modules-settings'
 
 interface DashboardSettings {
   visibility_mode: 'offline' | 'private' | 'public'
@@ -37,19 +38,16 @@ interface DashboardSettings {
   dashboard_icon_url: string | null
   config_page_enabled: boolean
   guestbook_enabled: boolean
-  streaming_music_file: string | null
-  streaming_music_enabled: boolean
-  streaming_music_loop: boolean
-  streaming_music_volume: number
-  streaming_music_playlist: string[]
   streaming_title_enabled: boolean
   selected_camera_uid: string | null
-  stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
-  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
-  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
+  horizontal_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
+  vertical_stream_camera_display_mode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
   stream_pip_main_camera_uid: string | null
   horizontal_pip_main_camera_uid: string | null
   vertical_pip_main_camera_uid: string | null
+  rotation_interval: number
+  transition_effect: 'fade' | 'slide' | 'zoom' | 'none'
 }
 
 interface WebcamConfig {
@@ -63,16 +61,10 @@ interface ViewCameraSettings {
   [cameraUid: string]: boolean // camera_uid -> enabled
 }
 
-interface MusicFile {
-  name: string
-  url: string
-}
-
 export default function SettingsCard() {
   const { isConnected } = useWebSocket()
   const [settings, setSettings] = useState<DashboardSettings | null>(null)
   const [originalSettings, setOriginalSettings] = useState<DashboardSettings | null>(null)
-  const [musicFiles, setMusicFiles] = useState<MusicFile[]>([])
   const [webcams, setWebcams] = useState<WebcamConfig[]>([])
   const [streamViewCameras, setStreamViewCameras] = useState<ViewCameraSettings>({})
   const [horizontalViewCameras, setHorizontalViewCameras] = useState<ViewCameraSettings>({})
@@ -82,12 +74,9 @@ export default function SettingsCard() {
   const [uploading, setUploading] = useState(false)
   const [printerStatus, setPrinterStatus] = useState<'online' | 'offline'>('offline')
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // Load settings and music files
+  // Load settings
   useEffect(() => {
     loadSettings()
-    loadMusicFiles()
     loadWebcams()
     checkPrinterStatus()
   }, [])
@@ -123,7 +112,6 @@ export default function SettingsCard() {
         const data = await response.json()
         const settingsWithDefaults = {
           ...data,
-          streaming_music_playlist: data.streaming_music_playlist || [],
           streaming_title_enabled: data.streaming_title_enabled ?? true,
           stream_camera_display_mode: data.stream_camera_display_mode || 'single',
           horizontal_stream_camera_display_mode: data.horizontal_stream_camera_display_mode || 'single',
@@ -140,18 +128,6 @@ export default function SettingsCard() {
       toast.error('Failed to load settings')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const loadMusicFiles = async () => {
-    try {
-      const response = await fetch('/api/settings/music')
-      if (response.ok) {
-        const data = await response.json()
-        setMusicFiles(data.files || [])
-      }
-    } catch (error) {
-      console.error('Error loading music files:', error)
     }
   }
 
@@ -283,12 +259,8 @@ export default function SettingsCard() {
 
       if (response.ok) {
         const data = await response.json()
-        const settingsWithPlaylist = {
-          ...data,
-          streaming_music_playlist: data.streaming_music_playlist || []
-        }
-        setSettings(settingsWithPlaylist)
-        setOriginalSettings(settingsWithPlaylist)
+        setSettings(data)
+        setOriginalSettings(data)
         setHasUnsavedChanges(false)
         toast.success('Settings saved successfully')
         
@@ -296,8 +268,7 @@ export default function SettingsCard() {
         trackEvent('settings_saved', {
           video_feed_enabled: settings.video_feed_enabled,
           visibility_mode: settings.visibility_mode,
-          guestbook_enabled: settings.guestbook_enabled,
-          streaming_music_enabled: settings.streaming_music_enabled
+          guestbook_enabled: settings.guestbook_enabled
         })
       } else {
         toast.error('Failed to save settings')
@@ -366,77 +337,6 @@ export default function SettingsCard() {
       console.error('Error updating camera:', error)
       toast.error('Failed to update camera')
     }
-  }
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    const formData = new FormData()
-    formData.append('file', file)
-
-    setUploading(true)
-    try {
-      const response = await fetch('/api/settings/music', {
-        method: 'POST',
-        body: formData
-      })
-
-      if (response.ok) {
-        toast.success('Music file uploaded successfully')
-        loadMusicFiles()
-      } else {
-        const data = await response.json()
-        toast.error(data.error || 'Failed to upload file')
-      }
-    } catch (error) {
-      console.error('Error uploading file:', error)
-      toast.error('Failed to upload file')
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
-      }
-    }
-  }
-
-  const handleDeleteMusic = async (filename: string) => {
-    try {
-      const response = await fetch(`/api/settings/music?file=${encodeURIComponent(filename)}`, {
-        method: 'DELETE'
-      })
-
-      if (response.ok) {
-        toast.success('Music file deleted')
-        loadMusicFiles()
-        if (settings?.streaming_music_file === filename) {
-          updateSettings({ streaming_music_file: null })
-        }
-        if (settings?.streaming_music_playlist?.includes(filename)) {
-          updateSettings({
-            streaming_music_playlist: settings.streaming_music_playlist.filter(f => f !== filename)
-          })
-        }
-      } else {
-        toast.error('Failed to delete file')
-      }
-    } catch (error) {
-      console.error('Error deleting file:', error)
-      toast.error('Failed to delete file')
-    }
-  }
-
-  const toggleMusicInPlaylist = (filename: string) => {
-    if (!settings) return
-    
-    const currentPlaylist = settings.streaming_music_playlist || []
-    const isInPlaylist = currentPlaylist.includes(filename)
-    
-    const newPlaylist = isInPlaylist
-      ? currentPlaylist.filter(f => f !== filename)
-      : [...currentPlaylist, filename]
-    
-    updateSettings({ streaming_music_playlist: newPlaylist })
   }
 
   if (loading) {
@@ -521,7 +421,7 @@ export default function SettingsCard() {
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="printer" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="printer">
               <Cpu className="h-4 w-4 mr-2" />
               Printer
@@ -537,6 +437,10 @@ export default function SettingsCard() {
             <TabsTrigger value="streaming">
               <Radio className="h-4 w-4 mr-2" />
               Streaming
+            </TabsTrigger>
+            <TabsTrigger value="modules">
+              <Grid2X2 className="h-4 w-4 mr-2" />
+              Modules
             </TabsTrigger>
           </TabsList>
 
@@ -822,142 +726,61 @@ export default function SettingsCard() {
                 </div>
               </div>
 
+              {/* Auto-Rotate Settings */}
               <div className="border-t border-zinc-800 pt-4">
-                <h3 className="text-sm font-semibold mb-3">Music Settings</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="music-enabled">Enable Music</Label>
-                      <p className="text-xs text-muted-foreground">Play music during streams</p>
-                    </div>
-                    <Switch
-                      id="music-enabled"
-                      checked={settings.streaming_music_enabled}
-                      onCheckedChange={(checked) => updateSettings({ streaming_music_enabled: checked })}
-                    />
-                  </div>
-
-                  {settings.streaming_music_enabled && (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-0.5">
-                          <Label htmlFor="music-loop">Loop Music</Label>
-                          <p className="text-xs text-muted-foreground">Play music continuously</p>
-                        </div>
-                        <Switch
-                          id="music-loop"
-                          checked={settings.streaming_music_loop}
-                          onCheckedChange={(checked) => updateSettings({ streaming_music_loop: checked })}
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="music-volume" className="flex items-center gap-2">
-                            <Volume2 className="h-4 w-4" />
-                            Volume
-                          </Label>
-                          <span className="text-sm text-muted-foreground">{settings.streaming_music_volume}%</span>
-                        </div>
-                        <Slider
-                          id="music-volume"
-                          min={0}
-                          max={100}
-                          step={1}
-                          value={[settings.streaming_music_volume]}
-                          onValueChange={(value: number[]) => updateSettings({ streaming_music_volume: value[0] })}
-                          className="w-full"
-                        />
-                      </div>
-
-
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="border-t border-zinc-800 pt-4">
-                <h3 className="text-sm font-semibold mb-3">Upload Music</h3>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="audio/*"
-                      onChange={handleFileUpload}
-                      disabled={uploading}
-                      className="flex-1"
-                    />
-                    <Button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      variant="outline"
-                    >
-                      {uploading ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Upload className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Supported formats: MP3, WAV, OGG, AAC, FLAC, M4A (max 50MB)
-                  </p>
-                </div>
-              </div>
-
-              {musicFiles.length > 0 && (
-                <div className="border-t border-zinc-800 pt-4">
-                  <h3 className="text-sm font-semibold mb-3">Stream Playlist</h3>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Select which songs to play in stream views
-                  </p>
+                <h3 className="text-sm font-semibold mb-3">Auto-Rotate Settings</h3>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Configure automatic camera rotation interval and transition effects
+                </p>
+                <div className="space-y-4">
                   <div className="space-y-2">
-                    {musicFiles.map((file) => (
-                      <div
-                        key={file.name}
-                        className="flex items-center justify-between p-2 rounded bg-zinc-900 hover:bg-zinc-800 transition-colors"
-                      >
-                        <div className="flex items-center gap-3 flex-1">
-                          <Checkbox
-                            checked={settings.streaming_music_playlist?.includes(file.name)}
-                            onCheckedChange={() => toggleMusicInPlaylist(file.name)}
-                          />
-                          <span className="text-sm truncate flex-1">{file.name}</span>
-                        </div>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-red-500 hover:text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Music File?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to delete &quot;{file.name}&quot;? This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleDeleteMusic(file.name)}
-                                className="bg-red-600 hover:bg-red-700"
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    ))}
+                    <Label htmlFor="rotation-interval">
+                      Rotation Interval (seconds)
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      How long to display each camera before switching (5-300 seconds)
+                    </p>
+                    <Input
+                      id="rotation-interval"
+                      type="number"
+                      min={5}
+                      max={300}
+                      value={settings.rotation_interval}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value)
+                        if (value >= 5 && value <= 300) {
+                          updateSettings({ rotation_interval: value })
+                        }
+                      }}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="transition-effect">
+                      Transition Effect
+                    </Label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Visual effect when switching between cameras
+                    </p>
+                    <Select
+                      value={settings.transition_effect}
+                      onValueChange={(value: 'fade' | 'slide' | 'zoom' | 'none') => 
+                        updateSettings({ transition_effect: value })
+                      }
+                    >
+                      <SelectTrigger id="transition-effect">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="fade">Fade</SelectItem>
+                        <SelectItem value="slide">Slide</SelectItem>
+                        <SelectItem value="zoom">Zoom</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* Camera Management Section */}
               <div className="border-t border-zinc-800 pt-4">
@@ -1073,6 +896,11 @@ export default function SettingsCard() {
                 )}
               </div>
             </div>
+          </TabsContent>
+
+          {/* Modules Tab */}
+          <TabsContent value="modules" className="space-y-4">
+            <ModulesSettings />
           </TabsContent>
         </Tabs>
       </CardContent>

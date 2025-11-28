@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Activity, Thermometer } from 'lucide-react'
 import { FaviconManager } from '@/components/favicon-manager'
-import { StreamMusicPlayer } from '@/components/stream-music-player'
 import { MultiCameraStream } from '@/components/multi-camera-stream'
 import { usePrinterData } from '@/lib/hooks/use-printer-data'
 import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
@@ -12,15 +11,13 @@ import type { PrinterStatus, TemperatureHistory } from '@/lib/types'
 interface StreamViewClientProps {
   initialStatus: PrinterStatus | null
   initialTemperatureHistory: TemperatureHistory | null
-  musicEnabled: boolean
-  musicVolume: number
-  musicPlaylist: string[]
-  musicLoop: boolean
   streamingTitleEnabled: boolean
   dashboardTitle: string
   dashboardSubtitle: string
-  streamCameraDisplayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap'
+  streamCameraDisplayMode: 'single' | 'grid' | 'pip' | 'offline_video_swap' | 'auto_rotate'
   enabledCameras: Array<{ uid: string; name: string; enabled: boolean }>
+  rotationInterval?: number
+  transitionEffect?: 'fade' | 'slide' | 'zoom' | 'none'
 }
 
 function formatTime(seconds: number): string {
@@ -58,15 +55,13 @@ function formatFinishTime(estimatedTimeLeft: number): string {
 export default function StreamViewClient({ 
   initialStatus, 
   initialTemperatureHistory,
-  musicEnabled,
-  musicVolume,
-  musicPlaylist,
-  musicLoop,
   streamingTitleEnabled,
   dashboardTitle,
   dashboardSubtitle,
   streamCameraDisplayMode,
-  enabledCameras
+  enabledCameras,
+  rotationInterval = 60,
+  transitionEffect = 'fade'
 }: StreamViewClientProps) {
   const { printerStatus, temperatureHistory, isConnected } = usePrinterData()
   const [currentTime, setCurrentTime] = useState<Date>(new Date())
@@ -87,13 +82,6 @@ export default function StreamViewClient({
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <FaviconManager status="offline" />
-        {/* Keep music playing even when disconnected */}
-        <StreamMusicPlayer 
-          enabled={musicEnabled}
-          volume={musicVolume}
-          playlist={musicPlaylist}
-          loop={musicLoop}
-        />
         <div className="text-center">
           <Activity className="h-16 w-16 mx-auto mb-4 text-gray-500" />
           <h1 className="text-2xl font-bold mb-2">Printer Disconnected</h1>
@@ -110,14 +98,6 @@ export default function StreamViewClient({
     <div className="relative min-h-screen w-screen bg-black overflow-hidden">
       <FaviconManager status={printerStatus.print.state} />
       
-      {/* Stream music player */}
-      <StreamMusicPlayer 
-        enabled={musicEnabled}
-        volume={musicVolume}
-        playlist={musicPlaylist}
-        loop={musicLoop}
-      />
-      
       {/* Full screen video feed */}
       <div className="absolute inset-0 bg-black">
         <MultiCameraStream
@@ -126,6 +106,8 @@ export default function StreamViewClient({
           enabledCameras={enabledCameras}
           imageRendering="auto"
           orientation="horizontal"
+          rotationInterval={rotationInterval}
+          transitionEffect={transitionEffect}
         />
       </div>
 

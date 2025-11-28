@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Activity } from "lucide-react"
 import PrinterDashboardClient from "./printer-dashboard-client"
 import type { PrinterStatus, TemperatureHistory, LifetimeStats } from "@/lib/types"
-import { isDatabaseConfigured, getDashboardSettings } from "@/lib/database"
+import { isDatabaseConfigured, getDashboardSettings, getEnabledModules } from "@/lib/database"
 import { getBaseUrl } from "@/lib/utils/environment"
 
 // Server-side function to fetch printer data
@@ -94,6 +94,7 @@ export default async function PrinterDashboard() {
   // Fetch dashboard settings
   let dashboardTitle = "s1pper's Dashboard"
   let dashboardSubtitle = "A dashboard for s1pper, the Ender 3 S1 Pro"
+  let enabledModules: any[] = []
   
   if (dbConfigured) {
     try {
@@ -102,6 +103,9 @@ export default async function PrinterDashboard() {
         dashboardTitle = settings.dashboard_title
         dashboardSubtitle = settings.dashboard_subtitle
       }
+      
+      // Fetch enabled modules
+      enabledModules = await getEnabledModules()
     } catch (error) {
       console.error('Error fetching dashboard settings:', error)
     }
@@ -116,6 +120,7 @@ export default async function PrinterDashboard() {
         isDatabaseConfigured={dbConfigured}
         dashboardTitle={dashboardTitle}
         dashboardSubtitle={dashboardSubtitle}
+        enabledModules={enabledModules}
       />
     </Suspense>
   )

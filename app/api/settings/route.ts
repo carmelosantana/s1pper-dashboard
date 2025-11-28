@@ -68,11 +68,6 @@ export async function GET(request: NextRequest) {
       dashboard_icon_url: settings.dashboard_icon_url,
       config_page_enabled: settings.config_page_enabled,
       guestbook_enabled: settings.guestbook_enabled,
-      streaming_music_file: settings.streaming_music_file,
-      streaming_music_enabled: settings.streaming_music_enabled,
-      streaming_music_loop: settings.streaming_music_loop,
-      streaming_music_playlist: settings.streaming_music_playlist || [],
-      streaming_music_volume: settings.streaming_music_volume || 50,
       streaming_title_enabled: settings.streaming_title_enabled ?? true,
       selected_camera_uid: settings.selected_camera_uid,
       stream_camera_display_mode: settings.stream_camera_display_mode || 'single',
@@ -81,6 +76,8 @@ export async function GET(request: NextRequest) {
       stream_pip_main_camera_uid: settings.stream_pip_main_camera_uid || null,
       horizontal_pip_main_camera_uid: settings.horizontal_pip_main_camera_uid || null,
       vertical_pip_main_camera_uid: settings.vertical_pip_main_camera_uid || null,
+      rotation_interval: settings.rotation_interval || 60,
+      transition_effect: settings.transition_effect || 'fade',
       updated_at: settings.updated_at
     })
   } catch (error) {
@@ -119,13 +116,6 @@ export async function PUT(request: NextRequest) {
       dashboard_icon_url,
       config_page_enabled,
       guestbook_enabled,
-      streaming_music_file,
-      streaming_music_enabled,
-      streaming_music_loop,
-      streaming_music_playlist,
-      streaming_music_volume,
-      streaming_music_crossfade_enabled,
-      streaming_music_crossfade_duration,
       streaming_title_enabled,
       selected_camera_uid,
       stream_camera_display_mode,
@@ -133,7 +123,9 @@ export async function PUT(request: NextRequest) {
       vertical_stream_camera_display_mode,
       stream_pip_main_camera_uid,
       horizontal_pip_main_camera_uid,
-      vertical_pip_main_camera_uid
+      vertical_pip_main_camera_uid,
+      rotation_interval,
+      transition_effect
     } = body
 
     if (visibility_mode && !['offline', 'private', 'public'].includes(visibility_mode)) {
@@ -164,34 +156,6 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    if (streaming_music_enabled !== undefined && typeof streaming_music_enabled !== 'boolean') {
-      return NextResponse.json(
-        { error: 'Invalid streaming_music_enabled. Must be a boolean' },
-        { status: 400 }
-      )
-    }
-
-    if (streaming_music_loop !== undefined && typeof streaming_music_loop !== 'boolean') {
-      return NextResponse.json(
-        { error: 'Invalid streaming_music_loop. Must be a boolean' },
-        { status: 400 }
-      )
-    }
-
-    if (streaming_music_playlist !== undefined && !Array.isArray(streaming_music_playlist)) {
-      return NextResponse.json(
-        { error: 'Invalid streaming_music_playlist. Must be an array' },
-        { status: 400 }
-      )
-    }
-
-    if (streaming_music_volume !== undefined && (typeof streaming_music_volume !== 'number' || streaming_music_volume < 0 || streaming_music_volume > 100)) {
-      return NextResponse.json(
-        { error: 'Invalid streaming_music_volume. Must be a number between 0 and 100' },
-        { status: 400 }
-      )
-    }
-
     if (streaming_title_enabled !== undefined && typeof streaming_title_enabled !== 'boolean') {
       return NextResponse.json(
         { error: 'Invalid streaming_title_enabled. Must be a boolean' },
@@ -199,23 +163,37 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    if (stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(stream_camera_display_mode)) {
+    if (stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate'].includes(stream_camera_display_mode)) {
       return NextResponse.json(
-        { error: 'Invalid stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
+        { error: 'Invalid stream_camera_display_mode. Must be single, grid, pip, offline_video_swap, or auto_rotate' },
         { status: 400 }
       )
     }
 
-    if (horizontal_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(horizontal_stream_camera_display_mode)) {
+    if (horizontal_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate'].includes(horizontal_stream_camera_display_mode)) {
       return NextResponse.json(
-        { error: 'Invalid horizontal_stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
+        { error: 'Invalid horizontal_stream_camera_display_mode. Must be single, grid, pip, offline_video_swap, or auto_rotate' },
         { status: 400 }
       )
     }
 
-    if (vertical_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap'].includes(vertical_stream_camera_display_mode)) {
+    if (vertical_stream_camera_display_mode && !['single', 'grid', 'pip', 'offline_video_swap', 'auto_rotate'].includes(vertical_stream_camera_display_mode)) {
       return NextResponse.json(
-        { error: 'Invalid vertical_stream_camera_display_mode. Must be single, grid, pip, or offline_video_swap' },
+        { error: 'Invalid vertical_stream_camera_display_mode. Must be single, grid, pip, offline_video_swap, or auto_rotate' },
+        { status: 400 }
+      )
+    }
+
+    if (rotation_interval !== undefined && (typeof rotation_interval !== 'number' || rotation_interval < 5 || rotation_interval > 300)) {
+      return NextResponse.json(
+        { error: 'Invalid rotation_interval. Must be a number between 5 and 300' },
+        { status: 400 }
+      )
+    }
+
+    if (transition_effect && !['fade', 'slide', 'zoom', 'none'].includes(transition_effect)) {
+      return NextResponse.json(
+        { error: 'Invalid transition_effect. Must be fade, slide, zoom, or none' },
         { status: 400 }
       )
     }
@@ -229,13 +207,6 @@ export async function PUT(request: NextRequest) {
       dashboard_icon_url,
       config_page_enabled,
       guestbook_enabled,
-      streaming_music_file,
-      streaming_music_enabled,
-      streaming_music_loop,
-      streaming_music_playlist,
-      streaming_music_volume,
-      streaming_music_crossfade_enabled,
-      streaming_music_crossfade_duration,
       streaming_title_enabled,
       selected_camera_uid,
       stream_camera_display_mode,
@@ -243,7 +214,9 @@ export async function PUT(request: NextRequest) {
       vertical_stream_camera_display_mode,
       stream_pip_main_camera_uid,
       horizontal_pip_main_camera_uid,
-      vertical_pip_main_camera_uid
+      vertical_pip_main_camera_uid,
+      rotation_interval,
+      transition_effect
     )
     
     if (!updatedSettings) {
@@ -261,11 +234,6 @@ export async function PUT(request: NextRequest) {
       dashboard_icon_url: updatedSettings.dashboard_icon_url,
       config_page_enabled: updatedSettings.config_page_enabled,
       guestbook_enabled: updatedSettings.guestbook_enabled,
-      streaming_music_file: updatedSettings.streaming_music_file,
-      streaming_music_enabled: updatedSettings.streaming_music_enabled,
-      streaming_music_loop: updatedSettings.streaming_music_loop,
-      streaming_music_playlist: updatedSettings.streaming_music_playlist || [],
-      streaming_music_volume: updatedSettings.streaming_music_volume || 50,
       streaming_title_enabled: updatedSettings.streaming_title_enabled ?? true,
       selected_camera_uid: updatedSettings.selected_camera_uid,
       stream_camera_display_mode: updatedSettings.stream_camera_display_mode || 'single',
@@ -274,6 +242,8 @@ export async function PUT(request: NextRequest) {
       stream_pip_main_camera_uid: updatedSettings.stream_pip_main_camera_uid || null,
       horizontal_pip_main_camera_uid: updatedSettings.horizontal_pip_main_camera_uid || null,
       vertical_pip_main_camera_uid: updatedSettings.vertical_pip_main_camera_uid || null,
+      rotation_interval: updatedSettings.rotation_interval || 60,
+      transition_effect: updatedSettings.transition_effect || 'fade',
       updated_at: updatedSettings.updated_at
     })
 
