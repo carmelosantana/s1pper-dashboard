@@ -126,6 +126,8 @@ export interface DockedCameraManagerProps {
   timestamp?: number
   onCameraClose?: (id: string) => void
   onOrderChange?: (orderedIds: string[]) => void
+  onWindowSizeChange?: (cameraId: string, width: number | string, height: number) => void
+  windowSizes?: Record<string, { width: number | string; height: number }>
   maxWindows?: number
   className?: string
 }
@@ -137,6 +139,8 @@ export const DockedCameraManager = memo(function DockedCameraManager({
   timestamp,
   onCameraClose,
   onOrderChange,
+  onWindowSizeChange,
+  windowSizes = {},
   maxWindows = 3,
   className = '',
 }: DockedCameraManagerProps) {
@@ -249,18 +253,21 @@ export const DockedCameraManager = memo(function DockedCameraManager({
           onDragOver={(e) => handleDragOver(e, camera.id)}
           onDragLeave={handleDragLeave}
           onDrop={(e) => handleDrop(e, camera.id)}
-          className={`flex-1 min-w-0 transition-all duration-150 ${
+          className={`min-w-0 transition-all duration-150 ${
             dragOverId === camera.id ? 'ring-2 ring-blue-500 ring-offset-2' : ''
           } ${draggedId === camera.id ? 'opacity-50' : ''}`}
+          style={{ flex: '1 1 0%' }}
         >
           <DockedWindow
             id={camera.id}
             title={camera.name}
             position={dockedPosition}
             onClose={() => handleClose(camera.id)}
-            defaultHeight={300}
+            defaultHeight={windowSizes[camera.id]?.height || 300}
+            defaultWidth={windowSizes[camera.id]?.width || '100%'}
             minHeight={150}
             maxHeight={800}
+            onSizeChange={onWindowSizeChange}
             dragHandleProps={dragHandleProps}
           >
             <CameraFeed

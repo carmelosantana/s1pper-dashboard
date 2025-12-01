@@ -14,9 +14,11 @@ export interface DockedWindowProps {
   position: DockedPosition
   className?: string
   defaultHeight?: number
+  defaultWidth?: number | string
   minHeight?: number
   maxHeight?: number
   onHeightChange?: (height: number) => void
+  onSizeChange?: (id: string, width: number | string, height: number) => void
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>
 }
 
@@ -81,34 +83,42 @@ export const DockedWindow = memo(function DockedWindow({
   position,
   className = '',
   defaultHeight = 300,
+  defaultWidth = '100%',
   minHeight = 150,
   maxHeight = 800,
   onHeightChange,
+  onSizeChange,
   dragHandleProps,
 }: DockedWindowProps) {
   const [height, setHeight] = useState(defaultHeight)
+  const [width, setWidth] = useState<number | string>(defaultWidth)
 
-  const handleResizeStop = useCallback((_e: unknown, _direction: unknown, _ref: unknown, d: { height: number }) => {
-    const newHeight = height + d.height
+  const handleResizeStop = useCallback((_e: unknown, _direction: unknown, ref: HTMLElement, _d: unknown) => {
+    const newHeight = ref.offsetHeight
+    const newWidth = ref.offsetWidth
     setHeight(newHeight)
+    setWidth(newWidth)
     onHeightChange?.(newHeight)
-  }, [height, onHeightChange])
+    onSizeChange?.(id, newWidth, newHeight)
+  }, [id, onHeightChange, onSizeChange])
 
   return (
     <Resizable
-      size={{ width: '100%', height }}
+      size={{ width, height }}
       onResizeStop={handleResizeStop}
       minHeight={minHeight}
       maxHeight={maxHeight}
+      minWidth={200}
+      maxWidth="100%"
       enable={{
         top: position === 'below',
-        right: false,
+        right: true,
         bottom: position === 'above',
-        left: false,
-        topRight: false,
-        bottomRight: false,
-        bottomLeft: false,
-        topLeft: false,
+        left: true,
+        topRight: position === 'below',
+        bottomRight: position === 'above',
+        bottomLeft: position === 'above',
+        topLeft: position === 'below',
       }}
       handleStyles={{
         top: {
@@ -121,8 +131,47 @@ export const DockedWindow = memo(function DockedWindow({
           height: '8px',
           bottom: '-4px',
         },
+        left: {
+          cursor: 'ew-resize',
+          width: '8px',
+          left: '-4px',
+        },
+        right: {
+          cursor: 'ew-resize',
+          width: '8px',
+          right: '-4px',
+        },
+        topLeft: {
+          cursor: 'nwse-resize',
+          width: '16px',
+          height: '16px',
+          top: '-8px',
+          left: '-8px',
+        },
+        topRight: {
+          cursor: 'nesw-resize',
+          width: '16px',
+          height: '16px',
+          top: '-8px',
+          right: '-8px',
+        },
+        bottomLeft: {
+          cursor: 'nesw-resize',
+          width: '16px',
+          height: '16px',
+          bottom: '-8px',
+          left: '-8px',
+        },
+        bottomRight: {
+          cursor: 'nwse-resize',
+          width: '16px',
+          height: '16px',
+          bottom: '-8px',
+          right: '-8px',
+        },
       }}
-      className={`flex-1 min-w-0 ${className}`}
+      className={`min-w-0 ${className}`}
+      style={{ flex: width === '100%' ? 1 : `0 0 ${width}px` }}
     >
       <div 
         className="docked-window h-full flex flex-col"

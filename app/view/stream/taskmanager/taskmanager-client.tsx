@@ -27,6 +27,9 @@ const MODEL_PREVIEW_DARK_BG_KEY = 'taskmanager_model_preview_dark_bg'
 const DOCKED_SNAPSHOT_ORDER_KEY = 'taskmanager_docked_snapshot_order'
 const DOCKED_CHROMA_ORDER_KEY = 'taskmanager_docked_chroma_order'
 const DOCKED_VIDEO_ORDER_KEY = 'taskmanager_docked_video_order'
+const DOCKED_SNAPSHOT_SIZES_KEY = 'taskmanager_docked_snapshot_sizes'
+const DOCKED_CHROMA_SIZES_KEY = 'taskmanager_docked_chroma_sizes'
+const DOCKED_VIDEO_SIZES_KEY = 'taskmanager_docked_video_sizes'
 
 // Type definitions
 type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'console' | 'system' | 'uptime' | 'lifetime'
@@ -248,6 +251,20 @@ export default function TaskManagerClient({
   const [dockedVideoOrder, setDockedVideoOrder] = useLocalStorageState<string[]>(
     DOCKED_VIDEO_ORDER_KEY,
     []
+  )
+  
+  // Docked camera window sizes
+  const [dockedSnapshotSizes, setDockedSnapshotSizes] = useLocalStorageState<Record<string, { width: number | string; height: number }>>(
+    DOCKED_SNAPSHOT_SIZES_KEY,
+    {}
+  )
+  const [dockedChromaSizes, setDockedChromaSizes] = useLocalStorageState<Record<string, { width: number | string; height: number }>>(
+    DOCKED_CHROMA_SIZES_KEY,
+    {}
+  )
+  const [dockedVideoSizes, setDockedVideoSizes] = useLocalStorageState<Record<string, { width: number | string; height: number }>>(
+    DOCKED_VIDEO_SIZES_KEY,
+    {}
   )
   
   // Other state
@@ -669,6 +686,19 @@ export default function TaskManagerClient({
     setDockedVideoOrder(newOrder)
   }, [setDockedVideoOrder])
 
+  // Handle docked camera window size changes
+  const handleSnapshotSizeChange = useCallback((cameraId: string, width: number | string, height: number) => {
+    setDockedSnapshotSizes(prev => ({ ...prev, [cameraId]: { width, height } }))
+  }, [setDockedSnapshotSizes])
+
+  const handleChromaSizeChange = useCallback((cameraId: string, width: number | string, height: number) => {
+    setDockedChromaSizes(prev => ({ ...prev, [cameraId]: { width, height } }))
+  }, [setDockedChromaSizes])
+
+  const handleVideoSizeChange = useCallback((cameraId: string, width: number | string, height: number) => {
+    setDockedVideoSizes(prev => ({ ...prev, [cameraId]: { width, height } }))
+  }, [setDockedVideoSizes])
+
   const connectionStatus = isConnected ? 'Connected' : 'Reconnecting...'
 
   return (
@@ -1052,6 +1082,8 @@ export default function TaskManagerClient({
             timestamp={snapshotTimestamp}
             onCameraClose={handleRemoveCameraFromWindow}
             onOrderChange={handleDockedSnapshotOrderChange}
+            onWindowSizeChange={handleSnapshotSizeChange}
+            windowSizes={dockedSnapshotSizes}
             maxWindows={3}
           />
         )}
@@ -1063,6 +1095,8 @@ export default function TaskManagerClient({
             placement="docked-above"
             onCameraClose={handleCloseChromaWindow}
             onOrderChange={handleDockedChromaOrderChange}
+            onWindowSizeChange={handleChromaSizeChange}
+            windowSizes={dockedChromaSizes}
             maxWindows={3}
           />
         )}
@@ -1074,6 +1108,8 @@ export default function TaskManagerClient({
             placement="docked-above"
             onCameraClose={handleCloseVideoWindow}
             onOrderChange={handleDockedVideoOrderChange}
+            onWindowSizeChange={handleVideoSizeChange}
+            windowSizes={dockedVideoSizes}
             maxWindows={3}
           />
         )}
@@ -1423,6 +1459,8 @@ export default function TaskManagerClient({
             timestamp={snapshotTimestamp}
             onCameraClose={handleRemoveCameraFromWindow}
             onOrderChange={handleDockedSnapshotOrderChange}
+            onWindowSizeChange={handleSnapshotSizeChange}
+            windowSizes={dockedSnapshotSizes}
             maxWindows={3}
           />
         )}
@@ -1434,6 +1472,8 @@ export default function TaskManagerClient({
             placement="docked-below"
             onCameraClose={handleCloseChromaWindow}
             onOrderChange={handleDockedChromaOrderChange}
+            onWindowSizeChange={handleChromaSizeChange}
+            windowSizes={dockedChromaSizes}
             maxWindows={3}
           />
         )}
@@ -1445,6 +1485,8 @@ export default function TaskManagerClient({
             placement="docked-below"
             onCameraClose={handleCloseVideoWindow}
             onOrderChange={handleDockedVideoOrderChange}
+            onWindowSizeChange={handleVideoSizeChange}
+            windowSizes={dockedVideoSizes}
             maxWindows={3}
           />
         )}
