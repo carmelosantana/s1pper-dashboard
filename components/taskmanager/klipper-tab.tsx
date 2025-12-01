@@ -18,7 +18,7 @@ import type { SystemStats } from '@/app/api/printer/system-stats/route'
 // Types
 type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'console' | 'system' | 'uptime' | 'lifetime'
 type VideoSize = 'responsive' | 'small' | 'medium' | 'large'
-type SnapshotPlacement = 'above' | 'below' | 'databoxes'
+type SnapshotPlacement = 'above' | 'below' | 'databoxes' | 'floating' | 'docked-above' | 'docked-below'
 
 interface ChromaCamera {
   id: string
@@ -126,7 +126,13 @@ const SnapshotSection = memo(function SnapshotSection({
   snapshotTimestamp: number
   isDataboxStyle?: boolean
 }) {
+  // Don't render if no cameras selected or if using floating/docked placement
   if (selectedSnapshotCameras.length === 0) return null
+  if (snapshotSettings.placement === 'floating' || 
+      snapshotSettings.placement === 'docked-above' || 
+      snapshotSettings.placement === 'docked-below') {
+    return null
+  }
   
   // Databox style: render as individual databox cards in the stats grid
   if (isDataboxStyle) {

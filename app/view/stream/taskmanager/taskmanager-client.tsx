@@ -11,6 +11,7 @@ import { KlipperTab } from '@/components/taskmanager/klipper-tab'
 import { ModelTab } from '@/components/taskmanager/model-tab'
 import { ApplicationsTab, ProcessesTab, NetworkingTab, UsersTab } from '@/components/taskmanager/tabs'
 import { getDataboxDisplayName } from '@/lib/utils/taskmanager-utils'
+import { FloatingCameraManager, DockedCameraManager, type CameraWindowConfig } from '@/components/ui/camera-window-manager'
 import type { PrinterStatus, WebcamConfig, LifetimeStats, GcodeMetadata } from '@/lib/types'
 import type { SystemStats, SystemInfo } from '@/app/api/printer/system-stats/route'
 
@@ -24,7 +25,7 @@ const MODEL_PREVIEW_DARK_BG_KEY = 'taskmanager_model_preview_dark_bg'
 // Type definitions
 type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'console' | 'system' | 'uptime' | 'lifetime'
 type VideoSize = 'responsive' | 'small' | 'medium' | 'large'
-type SnapshotPlacement = 'above' | 'below' | 'databoxes'
+type SnapshotPlacement = 'above' | 'below' | 'databoxes' | 'floating' | 'docked-above' | 'docked-below'
 type TabType = 'klipper' | 'model' | 'applications' | 'processes' | 'networking' | 'users'
 
 const DEFAULT_DATABOX_ORDER: DataboxType[] = ['model-preview', 'print-job', 'temperatures', 'system', 'uptime', 'lifetime']
@@ -523,6 +524,40 @@ export default function TaskManagerClient({
     setShowOptionsMenu(false)
   }, [])
 
+  // Handle removing a camera from floating/docked view
+  const handleRemoveCameraFromWindow = useCallback((cameraId: string) => {
+    setSelectedSnapshotCameras(prev => prev.filter(uid => uid !== cameraId))
+  }, [setSelectedSnapshotCameras])
+
+  // Convert selected snapshot cameras to CameraWindowConfig format
+  const snapshotCameraConfigs: CameraWindowConfig[] = useMemo(() => {
+    return selectedSnapshotCameras.map(cameraUid => {
+      const camera = availableWebcams.find(w => w.uid === cameraUid)
+      if (!camera) return null
+      return {
+        id: camera.uid,
+        name: camera.name,
+        url: `/api/camera/snapshot?uid=${cameraUid}`,
+        type: 'snapshot' as const,
+        fps: '5s', // 5 second refresh
+        aspectRatio: camera.aspect_ratio || '16:9',
+      }
+    }).filter(Boolean) as CameraWindowConfig[]
+  }, [selectedSnapshotCameras, availableWebcams])
+
+  // Convert chroma cameras to CameraWindowConfig format
+  const chromaCameraConfigs: CameraWindowConfig[] = useMemo(() => {
+    return chromaCameras.map(camera => ({
+      id: camera.id,
+      name: camera.title,
+      url: camera.url,
+      type: 'video' as const,
+      fps: camera.framerate,
+      chromaColor: camera.chromaColor === 'custom' ? camera.customColor : 
+        camera.chromaColor === 'green' ? '#00FF00' : '#0000FF',
+    }))
+  }, [chromaCameras])
+
   const connectionStatus = isConnected ? 'Connected' : 'Reconnecting...'
 
   return (
@@ -645,11 +680,33 @@ export default function TaskManagerClient({
               <option value="above">Above Charts</option>
               <option value="below">Below Charts</option>
               <option value="databoxes">In Data Boxes</option>
+              <option value="floating">Floating Windows</option>
+              <option value="docked-above">Docked Above</option>
+              <option value="docked-below">Docked Below</option>
             </select>
           </div>
         </div>
         
-        <div className="flex justify-end">
+        {/* Floating/Docked info */}
+        {(snapshotSettings.placement === 'floating' || 
+          snapshotSettings.placement === 'docked-above' || 
+          snapshotSettings.placement === 'docked-below') && (
+          <div className="mt-2 p-2 bg-[#FFFFCC] border border-[#808080] text-[10px] text-black">
+            {snapshotSettings.placement === 'floating' ? (
+              <span>
+                📌 Floating windows can be moved and resized freely.
+                Click a window to bring it to front.
+              </span>
+            ) : (
+              <span>
+                📌 Docked windows appear {snapshotSettings.placement === 'docked-above' ? 'above' : 'below'} the main window.
+                Up to 3 cameras can be displayed side by side.
+              </span>
+            )}
+          </div>
+        )}
+        
+        <div className="flex justify-end mt-3">
           <XPButton onClick={() => setShowSnapshotDialog(false)}>Close</XPButton>
         </div>
       </XPDialog>
@@ -708,14 +765,39 @@ export default function TaskManagerClient({
         </div>
       </XPDialog>
 
-      {/* Windows XP Window Frame */}
-      <div 
-        className="w-full max-w-4xl flex flex-col shadow-2xl"
-        style={{
-          height: 'calc(100vh - 32px)',
-          maxHeight: 'calc(100vh - 32px)',
-          borderRadius: '8px 8px 4px 4px',
-          border: '1px solid #0054E3',
+      {/* Floating Camera Windows */}
+      <FloatingCameraManager
+        cameras={snapshotCameraConfigs}
+        placement={snapshotSettings.placement}
+        timestamp={snapshotTimestamp}
+        onCameraClose={handleRemoveCameraFromWindow}
+      />
+
+      {/* Main Layout Container - handles docked windows positioning */}
+      <div className="w-full max-w-4xl flex flex-col gap-3">
+        {/* Docked Above */}
+        {snapshotSettings.placement === 'docked-above' && (
+          <DockedCameraManager
+            cameras={snapshotCameraConfigs}
+            placement="docked-above"
+            timestamp={snapshotTimestamp}
+            onCameraClose={handleRemoveCameraFromWindow}
+            maxWindows={3}
+          />
+        )}
+
+        {/* Windows XP Window Frame */}
+        <div 
+          className="w-full flex flex-col shadow-2xl"
+          style={{
+            height: snapshotSettings.placement === 'docked-above' || snapshotSettings.placement === 'docked-below' 
+              ? 'calc(100vh - 200px)' 
+              : 'calc(100vh - 32px)',
+            maxHeight: snapshotSettings.placement === 'docked-above' || snapshotSettings.placement === 'docked-below'
+              ? 'calc(100vh - 200px)'
+              : 'calc(100vh - 32px)',
+            borderRadius: '8px 8px 4px 4px',
+            border: '1px solid #0054E3',
           overflow: 'hidden',
         }}
       >
@@ -1028,6 +1110,18 @@ export default function TaskManagerClient({
             </span>
           </div>
         </div>
+      </div>
+
+        {/* Docked Below */}
+        {snapshotSettings.placement === 'docked-below' && (
+          <DockedCameraManager
+            cameras={snapshotCameraConfigs}
+            placement="docked-below"
+            timestamp={snapshotTimestamp}
+            onCameraClose={handleRemoveCameraFromWindow}
+            maxWindows={3}
+          />
+        )}
       </div>
     </div>
   )
