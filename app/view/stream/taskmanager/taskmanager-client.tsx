@@ -1,10 +1,24 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
-import { Minus, Maximize2, X, ChevronDown } from 'lucide-react'
+import { Minus, Maximize2, X, ChevronDown, Camera, Plus, Trash2 } from 'lucide-react'
 import { usePrinterData } from '@/lib/hooks/use-printer-data'
-import type { PrinterStatus } from '@/lib/types'
+import type { PrinterStatus, WebcamConfig } from '@/lib/types'
 import type { SystemStats, SystemInfo } from '@/app/api/printer/system-stats/route'
+
+// Local storage keys
+const SNAPSHOT_CAMERAS_KEY = 'taskmanager_snapshot_cameras'
+const CHROMA_CAMERAS_KEY = 'taskmanager_chroma_cameras'
+
+// Chroma camera configuration type
+interface ChromaCamera {
+  id: string
+  title: string
+  url: string
+  framerate: 15 | 30 | 60
+  chromaColor: 'green' | 'blue' | 'custom'
+  customColor?: string
+}
 
 // Windows XP Task Manager tabs - reordered with Klipper (Performance) first
 type TabType = 'klipper' | 'applications' | 'processes' | 'networking' | 'users'
@@ -350,7 +364,22 @@ export default function TaskManagerClient({
   const [systemInfo] = useState<SystemInfo | null>(initialSystemInfo)
   const [showShutdownDialog, setShowShutdownDialog] = useState(false)
   const [showViewMenu, setShowViewMenu] = useState(false)
+  const [showOptionsMenu, setShowOptionsMenu] = useState(false)
   const [isShuttingDown, setIsShuttingDown] = useState(false)
+  
+  // Snapshot camera state
+  const [availableWebcams, setAvailableWebcams] = useState<WebcamConfig[]>([])
+  const [selectedSnapshotCameras, setSelectedSnapshotCameras] = useState<string[]>([])
+  const [snapshotUrls, setSnapshotUrls] = useState<Record<string, string>>({})
+  const [snapshotTimestamp, setSnapshotTimestamp] = useState<number>(Date.now())
+  
+  // Chroma/Live Video camera state
+  const [chromaCameras, setChromaCameras] = useState<ChromaCamera[]>([])
+  const [showChromaDialog, setShowChromaDialog] = useState(false)
+  const [editingChromaCameras, setEditingChromaCameras] = useState<ChromaCamera[]>([])
+  
+  // Snapshot dialog state
+  const [showSnapshotDialog, setShowSnapshotDialog] = useState(false)
   
   // Check if we're in development mode
   const isDevelopment = process.env.NODE_ENV === 'development'
@@ -431,6 +460,117 @@ export default function TaskManagerClient({
     // Then update every second
     const interval = setInterval(updateHistories, 1000)
     return () => clearInterval(interval)
+  }, [])
+
+  // Load selected cameras from localStorage and fetch available webcams
+  useEffect(() => {
+    // Load saved selection from localStorage
+    const savedCameras = localStorage.getItem(SNAPSHOT_CAMERAS_KEY)
+    if (savedCameras) {
+      try {
+        setSelectedSnapshotCameras(JSON.parse(savedCameras))
+      } catch (e) {
+        console.error('Failed to parse saved camera selection:', e)
+      }
+    }
+    
+    // Load saved chroma cameras from localStorage
+    const savedChromaCameras = localStorage.getItem(CHROMA_CAMERAS_KEY)
+    if (savedChromaCameras) {
+      try {
+        setChromaCameras(JSON.parse(savedChromaCameras))
+      } catch (e) {
+        console.error('Failed to parse saved chroma cameras:', e)
+      }
+    }
+    
+    // Fetch available webcams
+    const fetchWebcams = async () => {
+      try {
+        const response = await fetch('/api/camera/data')
+        if (response.ok) {
+          const data = await response.json()
+          if (data.webcams) {
+            setAvailableWebcams(data.webcams)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch webcams:', error)
+      }
+    }
+    fetchWebcams()
+  }, [])
+
+  // Refresh snapshots every 5 seconds for selected cameras
+  useEffect(() => {
+    if (selectedSnapshotCameras.length === 0) return
+    
+    const refreshSnapshots = () => {
+      setSnapshotTimestamp(Date.now())
+    }
+    
+    // Initial load
+    refreshSnapshots()
+    
+    // Refresh every 5 seconds
+    const interval = setInterval(refreshSnapshots, 5000)
+    return () => clearInterval(interval)
+  }, [selectedSnapshotCameras])
+
+  // Handle camera selection change
+  const handleCameraSelectionChange = useCallback((cameraUid: string, checked: boolean) => {
+    setSelectedSnapshotCameras(prev => {
+      const newSelection = checked 
+        ? [...prev, cameraUid]
+        : prev.filter(uid => uid !== cameraUid)
+      
+      // Save to localStorage
+      localStorage.setItem(SNAPSHOT_CAMERAS_KEY, JSON.stringify(newSelection))
+      return newSelection
+    })
+  }, [])
+
+  // Chroma dialog handlers
+  const openChromaDialog = useCallback(() => {
+    setEditingChromaCameras([...chromaCameras])
+    setShowChromaDialog(true)
+  }, [chromaCameras])
+
+  const addChromaCamera = useCallback(() => {
+    const newCamera: ChromaCamera = {
+      id: `chroma_${Date.now()}`,
+      title: `Camera ${editingChromaCameras.length + 1}`,
+      url: '',
+      framerate: 30,
+      chromaColor: 'green',
+    }
+    setEditingChromaCameras(prev => [...prev, newCamera])
+  }, [editingChromaCameras.length])
+
+  const updateChromaCamera = useCallback((id: string, updates: Partial<ChromaCamera>) => {
+    setEditingChromaCameras(prev => 
+      prev.map(cam => cam.id === id ? { ...cam, ...updates } : cam)
+    )
+  }, [])
+
+  const removeChromaCamera = useCallback((id: string) => {
+    setEditingChromaCameras(prev => prev.filter(cam => cam.id !== id))
+  }, [])
+
+  const saveChromaCameras = useCallback(() => {
+    setChromaCameras(editingChromaCameras)
+    localStorage.setItem(CHROMA_CAMERAS_KEY, JSON.stringify(editingChromaCameras))
+    setShowChromaDialog(false)
+  }, [editingChromaCameras])
+
+  // Get chroma color CSS value
+  const getChromaColorValue = useCallback((camera: ChromaCamera) => {
+    switch (camera.chromaColor) {
+      case 'green': return '#00FF00'
+      case 'blue': return '#0000FF'
+      case 'custom': return camera.customColor || '#00FF00'
+      default: return '#00FF00'
+    }
   }, [])
 
   const stats = systemStats
@@ -614,7 +754,132 @@ export default function TaskManagerClient({
 
   // Render Klipper Tab (formerly Performance) - matching Windows XP layout
   const renderKlipperTab = () => (
-    <div className="p-3 h-full flex flex-col font-['Tahoma'] text-xs overflow-auto">
+    <div className="p-3 font-['Tahoma'] text-xs">
+      {/* Live Video Section - Shows chroma key camera feeds */}
+      {chromaCameras.length > 0 && (
+        <div className="mb-3">
+          <div className="text-black font-bold mb-2 flex items-center gap-2">
+            <Camera className="w-4 h-4" />
+            Live Video
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {chromaCameras.map(camera => (
+              <div 
+                key={camera.id}
+                style={{ 
+                  border: '1px solid #919B9C',
+                  boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
+                }}
+              >
+                {/* Camera name header */}
+                <div 
+                  className="px-2 py-1 text-black font-bold flex items-center justify-between"
+                  style={{
+                    backgroundColor: '#D4D0C8',
+                    borderBottom: '1px solid #808080',
+                    boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
+                  }}
+                >
+                  <span className="truncate">{camera.title}</span>
+                  <div className="flex items-center gap-1">
+                    <span 
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: getChromaColorValue(camera) }}
+                    />
+                    <span 
+                      className="text-[8px] bg-[#316AC5] text-white px-1.5 py-0.5 rounded"
+                      style={{ fontSize: '8px' }}
+                    >
+                      {camera.framerate}fps
+                    </span>
+                  </div>
+                </div>
+                {/* Video feed with chroma background */}
+                <div 
+                  className="relative"
+                  style={{ 
+                    backgroundColor: getChromaColorValue(camera),
+                    aspectRatio: '16/9'
+                  }}
+                >
+                  {camera.url && (
+                    <img
+                      src={camera.url}
+                      alt={`${camera.title} feed`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none'
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Camera Snapshots Section - Only show when cameras are selected */}
+      {selectedSnapshotCameras.length > 0 && (
+        <div className="mb-3">
+          <div className="text-black font-bold mb-2 flex items-center gap-2">
+            <Camera className="w-4 h-4" />
+            Camera Snapshots
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {selectedSnapshotCameras.map(cameraUid => {
+              const camera = availableWebcams.find(w => w.uid === cameraUid)
+              if (!camera) return null
+              
+              return (
+                <div 
+                  key={cameraUid}
+                  style={{ 
+                    border: '1px solid #919B9C',
+                    boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
+                  }}
+                >
+                  {/* Camera name header */}
+                  <div 
+                    className="px-2 py-1 text-black font-bold flex items-center justify-between"
+                    style={{
+                      backgroundColor: '#D4D0C8',
+                      borderBottom: '1px solid #808080',
+                      boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
+                    }}
+                  >
+                    <span className="truncate">{camera.name}</span>
+                    <span 
+                      className="text-[8px] bg-[#316AC5] text-white px-1.5 py-0.5 rounded"
+                      style={{ fontSize: '8px' }}
+                    >
+                      5s
+                    </span>
+                  </div>
+                  {/* Snapshot image */}
+                  <div 
+                    className="relative"
+                    style={{ 
+                      backgroundColor: '#000000',
+                      aspectRatio: camera.aspect_ratio === '16:9' ? '16/9' : '4/3'
+                    }}
+                  >
+                    <img
+                      src={`/api/camera/snapshot?uid=${cameraUid}&t=${snapshotTimestamp}`}
+                      alt={`${camera.name} snapshot`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none'
+                      }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Top row: Small gauge + History graph (like CPU Usage + CPU Usage History) */}
       <div className="grid grid-cols-4 gap-3 mb-3">
         {/* Hotend Usage - small vertical gauge */}
@@ -908,58 +1173,254 @@ export default function TaskManagerClient({
         fontFamily: 'Tahoma, "MS Sans Serif", Arial, sans-serif',
       }}
     >
-      {/* Shutdown Confirmation Dialog */}
-      {showShutdownDialog && (
+      {/* Chroma Camera Configuration Dialog */}
+      {showChromaDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div 
-            className="bg-[#ECE9D8] border border-[#0054E3] rounded shadow-xl"
-            style={{ minWidth: '350px' }}
+            className="w-96 shadow-lg"
+            style={{
+              backgroundColor: XP_COLORS.windowBg,
+              border: '2px outset #FFFFFF',
+              borderRadius: '8px',
+            }}
           >
             {/* Dialog Title Bar */}
             <div 
               className="flex items-center justify-between px-2 py-1"
               style={{
                 background: 'linear-gradient(180deg, #0A6AF3 0%, #0054E3 50%, #003EB8 100%)',
+                borderTopLeftRadius: '6px',
+                borderTopRightRadius: '6px',
               }}
             >
-              <span className="text-white text-xs font-bold">⚠️ Emergency Shutdown</span>
+              <span className="text-white text-xs font-bold">Chroma Cameras</span>
               <button 
-                onClick={() => setShowShutdownDialog(false)}
-                className="w-4 h-4 flex items-center justify-center text-white hover:bg-red-500 rounded"
+                className="w-4 h-4 rounded-sm flex items-center justify-center text-white"
+                style={{
+                  background: 'linear-gradient(180deg, #E87A6E 0%, #D85C4B 50%, #C44333 100%)',
+                  border: '1px solid rgba(255,255,255,0.5)',
+                }}
+                onClick={() => setShowChromaDialog(false)}
               >
-                <X className="w-3 h-3" />
+                <X className="w-2.5 h-2.5" />
               </button>
             </div>
             
             {/* Dialog Content */}
-            <div className="p-3">
-              <div className="flex items-start gap-2 mb-3">
-                <span className="text-xl">⚠️</span>
-                <div>
-                  <p className="text-black font-bold text-xs mb-1">Emergency Shutdown Warning</p>
-                  <p className="text-black text-[11px]">
-                    This will immediately halt the printer and transition it to a shutdown state.
-                    <br /><br />
-                    <strong>WARNING:</strong> Use this only in emergencies. The printer will stop all operations immediately.
-                  </p>
-                </div>
+            <div className="p-3 overflow-y-auto" style={{ maxHeight: '50vh' }}>
+              <p className="text-black text-[11px] mb-3">
+                Add cameras for live video display with chroma key backgrounds. These feeds will appear in the Live Video section.
+              </p>
+              
+              {/* Camera list */}
+              <div className="space-y-3">
+                {editingChromaCameras.map((camera, index) => (
+                  <div 
+                    key={camera.id}
+                    className="p-2 border-2"
+                    style={{ 
+                      borderColor: '#808080',
+                      boxShadow: 'inset 1px 1px 2px rgba(0,0,0,0.2), inset -1px -1px 0 #FFFFFF',
+                      backgroundColor: '#F5F5F5',
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-black font-bold text-xs">Camera {index + 1}</span>
+                      <button
+                        onClick={() => removeChromaCamera(camera.id)}
+                        className="text-red-600 hover:text-red-800"
+                        title="Remove camera"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    
+                    {/* Title */}
+                    <div className="mb-2">
+                      <label className="block text-black text-[10px] mb-0.5">Title</label>
+                      <input
+                        type="text"
+                        value={camera.title}
+                        onChange={(e) => updateChromaCamera(camera.id, { title: e.target.value })}
+                        className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
+                        placeholder="Camera name"
+                      />
+                    </div>
+                    
+                    {/* URL */}
+                    <div className="mb-2">
+                      <label className="block text-black text-[10px] mb-0.5">Stream URL</label>
+                      <input
+                        type="text"
+                        value={camera.url}
+                        onChange={(e) => updateChromaCamera(camera.id, { url: e.target.value })}
+                        className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
+                        placeholder="http://..."
+                      />
+                    </div>
+                    
+                    {/* Framerate and Chroma color row */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Framerate */}
+                      <div>
+                        <label className="block text-black text-[10px] mb-0.5">Framerate</label>
+                        <select
+                          value={camera.framerate}
+                          onChange={(e) => updateChromaCamera(camera.id, { framerate: parseInt(e.target.value) as 15 | 30 | 60 })}
+                          className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
+                        >
+                          <option value={15}>15 fps</option>
+                          <option value={30}>30 fps</option>
+                          <option value={60}>60 fps</option>
+                        </select>
+                      </div>
+                      
+                      {/* Chroma Color */}
+                      <div>
+                        <label className="block text-black text-[10px] mb-0.5">Chroma Color</label>
+                        <select
+                          value={camera.chromaColor}
+                          onChange={(e) => updateChromaCamera(camera.id, { chromaColor: e.target.value as 'green' | 'blue' | 'custom' })}
+                          className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
+                        >
+                          <option value="green">Green</option>
+                          <option value="blue">Blue</option>
+                          <option value="custom">Custom</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    {/* Custom color picker */}
+                    {camera.chromaColor === 'custom' && (
+                      <div className="mt-2">
+                        <label className="block text-black text-[10px] mb-0.5">Custom Color</label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="color"
+                            value={camera.customColor || '#00FF00'}
+                            onChange={(e) => updateChromaCamera(camera.id, { customColor: e.target.value })}
+                            className="w-8 h-6 border border-[#808080] cursor-pointer"
+                          />
+                          <input
+                            type="text"
+                            value={camera.customColor || '#00FF00'}
+                            onChange={(e) => updateChromaCamera(camera.id, { customColor: e.target.value })}
+                            className="flex-1 px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
+                            placeholder="#00FF00"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
               
-              <div className="flex justify-end gap-2">
+              {/* Add camera button */}
+              <button
+                onClick={addChromaCamera}
+                className="w-full mt-3 px-3 py-1 text-xs border border-[#808080] bg-[#ECE9D8] hover:bg-[#F5F4EF] text-black flex items-center justify-center gap-2"
+                style={{ borderRadius: '2px' }}
+              >
+                <Plus className="w-3 h-3" />
+                Add Camera
+              </button>
+            </div>
+            
+            {/* Dialog buttons */}
+            <div className="flex justify-end gap-2 p-3 border-t border-[#808080]">
+              <button
+                onClick={() => setShowChromaDialog(false)}
+                className="px-4 py-1 text-xs border border-[#808080] bg-[#ECE9D8] hover:bg-[#F5F4EF] text-black"
+                style={{ borderRadius: '2px' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveChromaCameras}
+                className="px-4 py-1 text-xs border border-[#808080] bg-[#ECE9D8] hover:bg-[#F5F4EF] text-black"
+                style={{ borderRadius: '2px' }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Snapshots Configuration Dialog */}
+      {showSnapshotDialog && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+        >
+          <div 
+            className="w-80 shadow-lg"
+            style={{
+              backgroundColor: XP_COLORS.windowBg,
+              border: '2px outset #FFFFFF',
+              borderRadius: '8px',
+            }}
+          >
+            {/* Dialog title bar */}
+            <div 
+              className="flex items-center justify-between px-2 py-1"
+              style={{
+                background: 'linear-gradient(180deg, #0A6AF3 0%, #0054E3 50%, #003EB8 100%)',
+                borderTopLeftRadius: '6px',
+                borderTopRightRadius: '6px',
+              }}
+            >
+              <span className="text-white text-xs font-bold">Camera Snapshots</span>
+              <button 
+                className="w-4 h-4 rounded-sm flex items-center justify-center text-white"
+                style={{
+                  background: 'linear-gradient(180deg, #E87A6E 0%, #D85C4B 50%, #C44333 100%)',
+                  border: '1px solid rgba(255,255,255,0.5)',
+                }}
+                onClick={() => setShowSnapshotDialog(false)}
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </div>
+            {/* Dialog content */}
+            <div className="p-3">
+              <p className="text-[11px] text-black mb-3">
+                Select cameras to display in the snapshot section.
+              </p>
+              <div className="space-y-1">
+                {availableWebcams.length > 0 ? (
+                  availableWebcams.map(camera => (
+                    <label 
+                      key={camera.uid}
+                      className="flex items-center gap-2 px-2 py-1 text-[11px] text-black hover:bg-[#316AC5] hover:text-white cursor-pointer rounded"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedSnapshotCameras.includes(camera.uid)}
+                        onChange={(e) => handleCameraSelectionChange(camera.uid, e.target.checked)}
+                        className="w-3 h-3"
+                      />
+                      <Camera className="w-3 h-3" />
+                      <span className="truncate">{camera.name}</span>
+                    </label>
+                  ))
+                ) : (
+                  <div className="text-gray-500 italic text-[11px]">
+                    No cameras available
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 mt-3">
                 <button
-                  onClick={() => setShowShutdownDialog(false)}
-                  className="px-3 py-0.5 text-[10px] border border-[#808080] bg-[#ECE9D8] hover:bg-[#F5F4EF] text-black"
-                  style={{ borderRadius: '2px' }}
+                  className="px-3 py-0.5 text-[10px] text-black"
+                  style={{
+                    backgroundColor: XP_COLORS.windowBg,
+                    border: '2px outset #FFFFFF',
+                    borderRadius: '3px',
+                  }}
+                  onClick={() => setShowSnapshotDialog(false)}
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleEmergencyShutdown}
-                  disabled={isShuttingDown}
-                  className="px-3 py-0.5 text-[10px] border border-[#800000] bg-[#CC0000] hover:bg-[#AA0000] text-white disabled:opacity-50"
-                  style={{ borderRadius: '2px' }}
-                >
-                  {isShuttingDown ? 'Shutting Down...' : 'Shutdown'}
+                  Close
                 </button>
               </div>
             </div>
@@ -971,8 +1432,8 @@ export default function TaskManagerClient({
       <div 
         className="w-full max-w-4xl flex flex-col shadow-2xl"
         style={{
-          minHeight: 'min(600px, calc(100vh - 32px))',
-          maxHeight: 'calc(100vh - 16px)',
+          height: 'calc(100vh - 32px)',
+          maxHeight: 'calc(100vh - 32px)',
           borderRadius: '8px 8px 4px 4px',
           border: '1px solid #0054E3',
           overflow: 'hidden',
@@ -1053,12 +1514,58 @@ export default function TaskManagerClient({
           }}
         >
           <span className="px-2 py-0.5 hover:bg-[#316AC5] hover:text-white cursor-default text-black">File</span>
-          <span className="px-2 py-0.5 hover:bg-[#316AC5] hover:text-white cursor-default text-black">Options</span>
+          {/* Options dropdown */}
+          <div className="relative">
+            <span 
+              className={`px-2 py-0.5 cursor-default text-black flex items-center gap-0.5 ${showOptionsMenu ? 'bg-[#316AC5] text-white' : 'hover:bg-[#316AC5] hover:text-white'}`}
+              onClick={() => {
+                setShowViewMenu(false)
+                setShowOptionsMenu(!showOptionsMenu)
+              }}
+            >
+              Options
+              <ChevronDown className="w-3 h-3" />
+            </span>
+            {showOptionsMenu && (
+              <div 
+                className="absolute top-full left-0 z-50 py-1 min-w-[200px] shadow-md"
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #808080',
+                }}
+                onMouseLeave={() => setShowOptionsMenu(false)}
+              >
+                {/* Chroma option */}
+                <div 
+                  className="px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                  onClick={() => {
+                    openChromaDialog()
+                    setShowOptionsMenu(false)
+                  }}
+                >
+                  Chroma...
+                </div>
+                {/* Snapshots option */}
+                <div 
+                  className="px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                  onClick={() => {
+                    setShowSnapshotDialog(true)
+                    setShowOptionsMenu(false)
+                  }}
+                >
+                  Snapshots...
+                </div>
+              </div>
+            )}
+          </div>
           {/* View dropdown */}
           <div className="relative">
             <span 
               className={`px-2 py-0.5 cursor-default text-black flex items-center gap-0.5 ${showViewMenu ? 'bg-[#316AC5] text-white' : 'hover:bg-[#316AC5] hover:text-white'}`}
-              onClick={() => setShowViewMenu(!showViewMenu)}
+              onClick={() => {
+                setShowOptionsMenu(false)
+                setShowViewMenu(!showViewMenu)
+              }}
             >
               View
               <ChevronDown className="w-3 h-3" />
@@ -1142,7 +1649,7 @@ export default function TaskManagerClient({
               {/* Dialog content */}
               <div className="p-3">
                 <p className="text-[11px] text-black mb-3">
-                  Are you sure you want to shut down the printer host? This will attempt an emergency stop.
+                  Are you sure you want to emergency stop the printer?
                 </p>
                 <div className="flex justify-end gap-2">
                   <button
@@ -1157,10 +1664,10 @@ export default function TaskManagerClient({
                     Cancel
                   </button>
                   <button
-                    className="px-3 py-0.5 text-[10px] text-black"
+                    className="px-3 py-0.5 text-[10px] text-white"
                     style={{
-                      backgroundColor: XP_COLORS.windowBg,
-                      border: '2px outset #FFFFFF',
+                      backgroundColor: '#CC0000',
+                      border: '2px outset #FF6666',
                       borderRadius: '3px',
                     }}
                     disabled={isShuttingDown}
@@ -1176,13 +1683,13 @@ export default function TaskManagerClient({
                         setShowShutdownDialog(false)
                       } catch (error) {
                         console.error('Shutdown error:', error)
-                        alert('Failed to shutdown printer host')
+                        alert('Failed to emergency stop printer')
                       } finally {
                         setIsShuttingDown(false)
                       }
                     }}
                   >
-                    {isShuttingDown ? 'Shutting down...' : 'Shut Down'}
+                    {isShuttingDown ? 'Stopping...' : 'Shut Down'}
                   </button>
                 </div>
               </div>
@@ -1231,19 +1738,22 @@ export default function TaskManagerClient({
 
           {/* Tab content with white background and XP-style border */}
           <div 
-            className="flex-1 mx-2 mb-2 overflow-hidden"
+            className="flex-1 mx-2 mb-2 overflow-hidden flex flex-col"
             style={{
               backgroundColor: '#FFFFFF',
               border: '1px solid #919B9C',
               borderTop: 'none',
               borderRadius: '0 0 2px 2px',
+              minHeight: 0, // Important for flex children to scroll properly
             }}
           >
-            {activeTab === 'klipper' && renderKlipperTab()}
-            {activeTab === 'applications' && renderApplicationsTab()}
-            {activeTab === 'processes' && renderProcessesTab()}
-            {activeTab === 'networking' && renderNetworkingTab()}
-            {activeTab === 'users' && renderUsersTab()}
+            <div className="flex-1 overflow-auto">
+              {activeTab === 'klipper' && renderKlipperTab()}
+              {activeTab === 'applications' && renderApplicationsTab()}
+              {activeTab === 'processes' && renderProcessesTab()}
+              {activeTab === 'networking' && renderNetworkingTab()}
+              {activeTab === 'users' && renderUsersTab()}
+            </div>
           </div>
         </div>
 
