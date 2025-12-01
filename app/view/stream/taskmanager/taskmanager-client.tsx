@@ -14,6 +14,8 @@ import { getDataboxDisplayName } from '@/lib/utils/taskmanager-utils'
 import { FloatingCameraManager, DockedCameraManager, type CameraWindowConfig } from '@/components/ui/camera-window-manager'
 import type { PrinterStatus, WebcamConfig, LifetimeStats, GcodeMetadata } from '@/lib/types'
 import type { SystemStats, SystemInfo } from '@/app/api/printer/system-stats/route'
+import type { GrowTentStatus } from '@/lib/grow-tent-types'
+import { GrowTentClient } from '@/lib/grow-tent-client'
 
 // Local storage keys
 const SNAPSHOT_CAMERAS_KEY = 'taskmanager_snapshot_cameras'
@@ -30,14 +32,16 @@ const DOCKED_VIDEO_ORDER_KEY = 'taskmanager_docked_video_order'
 const DOCKED_SNAPSHOT_SIZES_KEY = 'taskmanager_docked_snapshot_sizes'
 const DOCKED_CHROMA_SIZES_KEY = 'taskmanager_docked_chroma_sizes'
 const DOCKED_VIDEO_SIZES_KEY = 'taskmanager_docked_video_sizes'
+const GROW_TENT_ENABLED_KEY = 'taskmanager_grow_tent_enabled'
+const GROW_TENT_API_URL_KEY = 'taskmanager_grow_tent_api_url'
 
 // Type definitions
-type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'console' | 'system' | 'uptime' | 'lifetime'
+type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'console' | 'system' | 'uptime' | 'lifetime' | 'grow-tent'
 type VideoSize = 'responsive' | 'small' | 'medium' | 'large'
 type SnapshotPlacement = 'above' | 'below' | 'databoxes' | 'floating' | 'docked-above' | 'docked-below'
 type TabType = 'klipper' | 'model' | 'applications' | 'processes' | 'networking' | 'users'
 
-const DEFAULT_DATABOX_ORDER: DataboxType[] = ['model-preview', 'print-job', 'temperatures', 'system', 'uptime', 'lifetime']
+const DEFAULT_DATABOX_ORDER: DataboxType[] = ['model-preview', 'print-job', 'temperatures', 'system', 'uptime', 'lifetime', 'grow-tent']
 
 // Helper function to map printer state to favicon suffix
 const getFaviconSuffix = (printState: string): string => {
@@ -297,6 +301,18 @@ export default function TaskManagerClient({
   const [showFileMenu, setShowFileMenu] = useState(false)
   const [draggedDatabox, setDraggedDatabox] = useState<DataboxType | null>(null)
   
+  // Grow tent state
+  const [growTentEnabled, setGrowTentEnabled] = useLocalStorageState<boolean>(
+    GROW_TENT_ENABLED_KEY,
+    false
+  )
+  const [growTentApiUrl, setGrowTentApiUrl] = useLocalStorageState<string>(
+    GROW_TENT_API_URL_KEY,
+    'http://localhost:3000'
+  )
+  const [growTentStatus, setGrowTentStatus] = useState<GrowTentStatus | null>(null)
+  const [growTentClient] = useState(() => new GrowTentClient(growTentApiUrl))
+  
   // Check if we're in development mode
   const isDevelopment = process.env.NODE_ENV === 'development'
   
@@ -408,6 +424,20 @@ export default function TaskManagerClient({
     }, []),
     30000,
     { immediate: true }
+  )
+
+  // Fetch grow tent status periodically (if enabled)
+  useInterval(
+    useCallback(async () => {
+      if (!growTentEnabled) return
+      
+      const status = await growTentClient.getStatus()
+      if (status) {
+        setGrowTentStatus(status)
+      }
+    }, [growTentEnabled, growTentClient]),
+    10000, // Update every 10 seconds
+    { immediate: true, enabled: growTentEnabled }
   )
 
   // Fetch available webcams on mount
@@ -1266,6 +1296,16 @@ export default function TaskManagerClient({
                   Video...
                 </div>
                 <div className="border-t border-[#808080] my-1" />
+                <div 
+                  className={`px-4 py-1 flex items-center justify-between cursor-pointer ${
+                    growTentEnabled ? 'text-black hover:bg-[#316AC5] hover:text-white' : 'text-black hover:bg-[#316AC5] hover:text-white'
+                  }`}
+                  onClick={() => setGrowTentEnabled(!growTentEnabled)}
+                >
+                  <span>Show Grow Tent</span>
+                  <span className="text-xs">{growTentEnabled ? '✓' : ''}</span>
+                </div>
+                <div className="border-t border-[#808080] my-1" />
                 <div className="px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer"
                   onClick={() => { setShowReorderDialog(true); setShowOptionsMenu(false) }}>
                   Reorder Databoxes...
@@ -1375,6 +1415,8 @@ export default function TaskManagerClient({
                   klippyState={liveStatus?.system?.klippyState}
                   filePosition={liveStatus?.file?.position}
                   fileSize={liveStatus?.file?.size}
+                  growTentStatus={growTentStatus}
+                  growTentEnabled={growTentEnabled}
                 />
               )}
               {activeTab === 'model' && (

@@ -168,6 +168,7 @@ export function getDataboxDisplayName(type: string): string {
     'system': 'System',
     'uptime': 'Uptime',
     'lifetime': 'Lifetime',
+    'grow-tent': 'Ambient Conditions',
   }
   return names[type] || type
 }

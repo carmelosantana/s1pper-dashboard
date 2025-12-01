@@ -1,7 +1,7 @@
 'use client'
 
 import { memo, useMemo } from 'react'
-import { Camera, Video, Image, Clock, Terminal, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Camera, Video, Image, Clock, Terminal, ToggleLeft, ToggleRight, Leaf } from 'lucide-react'
 import { XPGraph, XPVerticalBar, XP_COLORS } from '@/components/ui/xp-components'
 import { 
   formatTime, 
@@ -100,6 +100,10 @@ interface KlipperTabProps {
   klippyState?: string
   filePosition?: number
   fileSize?: number
+  
+  // Grow tent status
+  growTentStatus: GrowTentStatus | null
+  growTentEnabled: boolean
 }
 
 // Chroma color helper
@@ -853,6 +857,62 @@ const LifetimeDatabox = memo(function LifetimeDatabox({
   )
 })
 
+const GrowTentDatabox = memo(function GrowTentDatabox({
+  growTentStatus,
+  isEnabled
+}: {
+  growTentStatus: GrowTentStatus | null
+  isEnabled: boolean
+}) {
+  const databoxStyle = {
+    borderColor: '#919B9C',
+    boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
+  }
+  
+  // Don't render if not enabled or no data
+  if (!isEnabled || !growTentStatus || !growTentStatus.data || growTentStatus.data.length === 0) {
+    return null
+  }
+  
+  const device = growTentStatus.data[0]
+  
+  // Calculate VPD
+  const calculateVPD = (tempF: number, humidity: number): number => {
+    const tempC = (tempF - 32) * 5 / 9
+    const svp = 0.6108 * Math.exp((17.27 * tempC) / (tempC + 237.3))
+    const vpd = svp * (1 - humidity / 100)
+    return vpd
+  }
+  
+  const vpdLeaf = calculateVPD(device.temperature.fahrenheit, device.humidity.value)
+  
+  // Get active ports (fans/lights)
+  const activePorts = device.ports?.filter(p => p.online && p.mode > 0) || []
+  
+  return (
+    <div className="border p-2" style={databoxStyle}>
+      <div className="font-bold text-black mb-1 flex items-center gap-1">
+        <Leaf className="w-3 h-3" />
+        <span>Ambient Conditions</span>
+      </div>
+      <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
+        <span>Temperature</span>
+        <span className="text-right">{device.temperature.fahrenheit.toFixed(1)}°F</span>
+        <span>Humidity</span>
+        <span className="text-right">{device.humidity.value.toFixed(1)}%</span>
+        <span>VPD</span>
+        <span className="text-right">{vpdLeaf.toFixed(2)} kPa</span>
+        {activePorts.length > 0 && (
+          <>
+            <span>Equipment</span>
+            <span className="text-right">{activePorts.length} active</span>
+          </>
+        )}
+      </div>
+    </div>
+  )
+})
+
 // Main Klipper Tab Component
 export const KlipperTab = memo(function KlipperTab({
   chromaCameras,
@@ -877,7 +937,9 @@ export const KlipperTab = memo(function KlipperTab({
   displayStatus,
   klippyState,
   filePosition,
-  fileSize
+  fileSize,
+  growTentStatus,
+  growTentEnabled
 }: KlipperTabProps) {
   // Render databox based on type
   const renderDatabox = (databoxType: DataboxType) => {
@@ -958,6 +1020,15 @@ export const KlipperTab = memo(function KlipperTab({
           <LifetimeDatabox
             key={databoxType}
             lifetimeStats={lifetimeStats}
+          />
+        )
+      
+      case 'grow-tent':
+        return (
+          <GrowTentDatabox
+            key={databoxType}
+            growTentStatus={growTentStatus}
+            isEnabled={growTentEnabled}
           />
         )
       
