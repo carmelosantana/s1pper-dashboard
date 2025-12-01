@@ -1,8 +1,9 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
-import { Minus, Maximize2, X, ChevronDown, Camera, Plus, Trash2, Video, Image, Clock, GripVertical, ToggleLeft, ToggleRight } from 'lucide-react'
+import { Minus, Maximize2, X, ChevronDown, Camera, Plus, Trash2, Video, Image, Clock, GripVertical, ToggleLeft, ToggleRight, Terminal } from 'lucide-react'
 import { usePrinterData } from '@/lib/hooks/use-printer-data'
+import { usePrintStatus } from '@/lib/contexts/websocket-context'
 import type { PrinterStatus, WebcamConfig, LifetimeStats } from '@/lib/types'
 import type { SystemStats, SystemInfo } from '@/app/api/printer/system-stats/route'
 
@@ -13,10 +14,10 @@ const SNAPSHOT_SETTINGS_KEY = 'taskmanager_snapshot_settings'
 const DATABOX_ORDER_KEY = 'taskmanager_databox_order'
 const MODEL_PREVIEW_DARK_BG_KEY = 'taskmanager_model_preview_dark_bg'
 
-// Default databox order: Model Preview, Print Job, Temperatures, System, Uptime, Lifetime
+// Default databox order: Model Preview, Print Job, Temperatures, Console, System, Uptime, Lifetime
 // Snapshot is always added at the end if enabled
-type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'system' | 'uptime' | 'lifetime'
-const DEFAULT_DATABOX_ORDER: DataboxType[] = ['model-preview', 'print-job', 'temperatures', 'system', 'uptime', 'lifetime']
+type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'console' | 'system' | 'uptime' | 'lifetime'
+const DEFAULT_DATABOX_ORDER: DataboxType[] = ['model-preview', 'print-job', 'temperatures', 'console', 'system', 'uptime', 'lifetime']
 
 // Size options for video feeds
 // For Above/Below Charts: responsive, small (1 space), medium (2 spaces), large (3 spaces)
@@ -124,6 +125,44 @@ function getPowerColor(powerPercent: number): string {
   if (powerPercent >= 80) return '#FF0000' // Red - high power
   if (powerPercent >= 50) return '#FFFF00' // Yellow - medium power
   return '#00FF00' // Green - low power
+}
+
+// Calculate temperature change over a period (default: last 30 seconds)
+// Returns { value: number, formatted: string, color: string }
+function getTemperatureChange(
+  history: number[],
+  secondsAgo: number = 30
+): { value: number; formatted: string; color: string } {
+  if (history.length === 0) {
+    return { value: 0, formatted: '0', color: '#808080' }
+  }
+  
+  const currentTemp = history[history.length - 1]
+  // History is updated every 1 second, so index for N seconds ago
+  const historicalIndex = Math.max(0, history.length - 1 - secondsAgo)
+  const historicalTemp = history[historicalIndex]
+  
+  const change = currentTemp - historicalTemp
+  
+  // Format with sign and color
+  let formatted: string
+  let color: string
+  
+  if (Math.abs(change) < 0.5) {
+    // No significant change
+    formatted = '±0'
+    color = '#808080' // Gray
+  } else if (change > 0) {
+    // Heating up
+    formatted = `+${change.toFixed(1)}`
+    color = '#FF4444' // Red for heating
+  } else {
+    // Cooling down
+    formatted = `${change.toFixed(1)}`
+    color = '#4488FF' // Blue for cooling
+  }
+  
+  return { value: change, formatted, color }
 }
 
 // XP-style Graph Component with optional second line - memoized for performance
@@ -382,6 +421,7 @@ export default function TaskManagerClient({
   initialSystemInfo
 }: TaskManagerClientProps) {
   const { printerStatus, isConnected } = usePrinterData()
+  const { display_status } = usePrintStatus()
   const [activeTab, setActiveTab] = useState<TabType>('klipper')
   const [systemStats, setSystemStats] = useState<SystemStats | null>(initialSystemStats)
   const [systemInfo] = useState<SystemInfo | null>(initialSystemInfo)
@@ -782,6 +822,7 @@ export default function TaskManagerClient({
       case 'model-preview': return 'Model Preview'
       case 'print-job': return 'Print Job'
       case 'temperatures': return 'Temperatures'
+      case 'console': return 'Console'
       case 'system': return 'System'
       case 'uptime': return 'Uptime'
       case 'lifetime': return 'Lifetime'
@@ -1247,10 +1288,7 @@ export default function TaskManagerClient({
                 <div 
                   key={databoxType}
                   className="border p-0 overflow-hidden"
-                  style={{
-                    ...databoxStyle,
-                    backgroundColor: modelPreviewDarkBg ? '#000000' : 'transparent'
-                  }}
+                  style={databoxStyle}
                 >
                   <div className="font-bold text-black px-2 py-1 flex items-center justify-between">
                     <div className="flex items-center gap-1">
@@ -1275,20 +1313,27 @@ export default function TaskManagerClient({
                     </button>
                   </div>
                   <div 
-                    className="relative flex items-center justify-center"
+                    className="relative w-full"
                     style={{ 
                       backgroundColor: modelPreviewDarkBg ? '#000000' : 'transparent',
                       minHeight: '80px',
                       aspectRatio: '1/1',
-                      maxHeight: '120px'
+                      maxHeight: '120px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
                     }}
                   >
                     {modelThumbnail ? (
                       <img
                         src={modelThumbnail}
                         alt="Model preview"
-                        className="max-w-full max-h-full object-contain"
-                        style={{ margin: 'auto' }}
+                        style={{ 
+                          maxWidth: '100%', 
+                          maxHeight: '100%', 
+                          objectFit: 'contain',
+                          display: 'block'
+                        }}
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none'
                         }}
@@ -1334,6 +1379,10 @@ export default function TaskManagerClient({
               )
             
             case 'temperatures':
+              // Calculate temperature changes over the last 30 seconds
+              const hotendChange = getTemperatureChange(extruderHistory, 30)
+              const bedChange = getTemperatureChange(bedHistory, 30)
+              
               return (
                 <div 
                   key={databoxType}
@@ -1344,10 +1393,64 @@ export default function TaskManagerClient({
                   <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
                     <span>Hotend</span>
                     <span className="text-right">{extruderActual.toFixed(0)} / {extruderTarget.toFixed(0)}</span>
+                    <span className="text-[9px] text-gray-600">Change (30s)</span>
+                    <span 
+                      className="text-right font-bold text-[9px]"
+                      style={{ color: hotendChange.color }}
+                      title="Temperature change over last 30 seconds"
+                    >
+                      {hotendChange.formatted}°C
+                    </span>
                     <span>Bed</span>
                     <span className="text-right">{bedActual.toFixed(0)} / {bedTarget.toFixed(0)}</span>
+                    <span className="text-[9px] text-gray-600">Change (30s)</span>
+                    <span 
+                      className="text-right font-bold text-[9px]"
+                      style={{ color: bedChange.color }}
+                      title="Temperature change over last 30 seconds"
+                    >
+                      {bedChange.formatted}°C
+                    </span>
                     <span>CPU</span>
                     <span className="text-right">{stats?.system?.cpuTemp?.toFixed(0) || 'N/A'}°C</span>
+                  </div>
+                </div>
+              )
+            
+            case 'console':
+              // Get display message from printer status (M117 messages)
+              const displayMessage = display_status?.message || 
+                                     liveStatus?.system?.klippyMessage || 
+                                     ''
+              const klippyState = liveStatus?.system?.klippyState || 'unknown'
+              const filePosition = liveStatus?.file?.position || 0
+              const fileSize = liveStatus?.file?.size || 0
+              const fileProgress = fileSize > 0 ? ((filePosition / fileSize) * 100).toFixed(1) : '0.0'
+              
+              return (
+                <div 
+                  key={databoxType}
+                  className="border p-2"
+                  style={databoxStyle}
+                >
+                  <div className="font-bold text-black mb-1 flex items-center gap-1">
+                    <Terminal className="w-3 h-3" />
+                    <span>Console</span>
+                  </div>
+                  <div 
+                    className="bg-black text-green-400 font-mono text-[9px] p-1.5 overflow-hidden"
+                    style={{ 
+                      minHeight: '48px',
+                      maxHeight: '60px',
+                      borderRadius: '2px'
+                    }}
+                  >
+                    <div className="truncate" title={displayMessage || 'Ready'}>
+                      &gt; {displayMessage || 'Ready'}
+                    </div>
+                    <div className="text-green-600 text-[8px] mt-1">
+                      State: {klippyState} | File: {fileProgress}%
+                    </div>
                   </div>
                 </div>
               )
