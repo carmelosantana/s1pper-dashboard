@@ -27,6 +27,10 @@ export interface FloatingCameraManagerProps {
   placement: CameraWindowPlacement
   timestamp?: number // For refreshing snapshots
   onCameraClose?: (id: string) => void
+  savedPositions?: Record<string, { x: number; y: number }>
+  savedSizes?: Record<string, { width: number; height: number }>
+  onPositionChange?: (id: string, position: { x: number; y: number }) => void
+  onSizeChange?: (id: string, size: { width: number; height: number }) => void
   className?: string
 }
 
@@ -36,6 +40,10 @@ export const FloatingCameraManager = memo(function FloatingCameraManager({
   placement,
   timestamp,
   onCameraClose,
+  savedPositions = {},
+  savedSizes = {},
+  onPositionChange,
+  onSizeChange,
   className = '',
 }: FloatingCameraManagerProps) {
   // Track z-index for each window
@@ -73,13 +81,26 @@ export const FloatingCameraManager = memo(function FloatingCameraManager({
   }, [windowStates, baseZIndex])
   
   // Calculate default positions spread across the screen
-  const getDefaultPosition = useCallback((index: number) => {
+  const getDefaultPosition = useCallback((index: number, id: string) => {
+    // Use saved position if available, otherwise calculate default
+    if (savedPositions[id]) {
+      return savedPositions[id]
+    }
     const offset = index * 40
     return {
       x: 100 + offset,
       y: 100 + offset,
     }
-  }, [])
+  }, [savedPositions])
+
+  // Get default size for window
+  const getDefaultSize = useCallback((id: string) => {
+    // Use saved size if available, otherwise use default
+    if (savedSizes[id]) {
+      return savedSizes[id]
+    }
+    return { width: 400, height: 280 }
+  }, [savedSizes])
   
   // Only render if in floating mode
   if (placement !== 'floating') {
@@ -93,12 +114,14 @@ export const FloatingCameraManager = memo(function FloatingCameraManager({
           key={camera.id}
           id={camera.id}
           title={camera.name}
-          defaultPosition={getDefaultPosition(index)}
-          defaultSize={{ width: 400, height: 280 }}
+          defaultPosition={getDefaultPosition(index, camera.id)}
+          defaultSize={getDefaultSize(camera.id)}
           minWidth={200}
           minHeight={150}
           onFocus={handleWindowFocus}
           onClose={() => handleWindowClose(camera.id)}
+          onPositionChange={onPositionChange}
+          onSizeChange={onSizeChange}
           zIndex={getZIndex(camera.id)}
         >
           <CameraFeed

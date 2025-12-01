@@ -32,6 +32,12 @@ const DOCKED_VIDEO_ORDER_KEY = 'taskmanager_docked_video_order'
 const DOCKED_SNAPSHOT_SIZES_KEY = 'taskmanager_docked_snapshot_sizes'
 const DOCKED_CHROMA_SIZES_KEY = 'taskmanager_docked_chroma_sizes'
 const DOCKED_VIDEO_SIZES_KEY = 'taskmanager_docked_video_sizes'
+const FLOATING_SNAPSHOT_POSITIONS_KEY = 'taskmanager_floating_snapshot_positions'
+const FLOATING_SNAPSHOT_SIZES_KEY = 'taskmanager_floating_snapshot_sizes'
+const FLOATING_CHROMA_POSITIONS_KEY = 'taskmanager_floating_chroma_positions'
+const FLOATING_CHROMA_SIZES_KEY = 'taskmanager_floating_chroma_sizes'
+const FLOATING_VIDEO_POSITIONS_KEY = 'taskmanager_floating_video_positions'
+const FLOATING_VIDEO_SIZES_KEY = 'taskmanager_floating_video_sizes'
 const GROW_TENT_ENABLED_KEY = 'taskmanager_grow_tent_enabled'
 const GROW_TENT_API_URL_KEY = 'taskmanager_grow_tent_api_url'
 
@@ -287,6 +293,32 @@ export default function TaskManagerClient({
   )
   const [dockedVideoSizes, setDockedVideoSizes] = useLocalStorageState<Record<string, { width: number | string; height: number }>>(
     DOCKED_VIDEO_SIZES_KEY,
+    {}
+  )
+  
+  // Floating camera window positions and sizes
+  const [floatingSnapshotPositions, setFloatingSnapshotPositions] = useLocalStorageState<Record<string, { x: number; y: number }>>(
+    FLOATING_SNAPSHOT_POSITIONS_KEY,
+    {}
+  )
+  const [floatingSnapshotSizes, setFloatingSnapshotSizes] = useLocalStorageState<Record<string, { width: number; height: number }>>(
+    FLOATING_SNAPSHOT_SIZES_KEY,
+    {}
+  )
+  const [floatingChromaPositions, setFloatingChromaPositions] = useLocalStorageState<Record<string, { x: number; y: number }>>(
+    FLOATING_CHROMA_POSITIONS_KEY,
+    {}
+  )
+  const [floatingChromaSizes, setFloatingChromaSizes] = useLocalStorageState<Record<string, { width: number; height: number }>>(
+    FLOATING_CHROMA_SIZES_KEY,
+    {}
+  )
+  const [floatingVideoPositions, setFloatingVideoPositions] = useLocalStorageState<Record<string, { x: number; y: number }>>(
+    FLOATING_VIDEO_POSITIONS_KEY,
+    {}
+  )
+  const [floatingVideoSizes, setFloatingVideoSizes] = useLocalStorageState<Record<string, { width: number; height: number }>>(
+    FLOATING_VIDEO_SIZES_KEY,
     {}
   )
   
@@ -748,6 +780,32 @@ export default function TaskManagerClient({
     setDockedVideoSizes(prev => ({ ...prev, [cameraId]: { width, height } }))
   }, [setDockedVideoSizes])
 
+  // Handle floating camera window position changes
+  const handleFloatingSnapshotPositionChange = useCallback((id: string, position: { x: number; y: number }) => {
+    setFloatingSnapshotPositions(prev => ({ ...prev, [id]: position }))
+  }, [setFloatingSnapshotPositions])
+
+  const handleFloatingChromaPositionChange = useCallback((id: string, position: { x: number; y: number }) => {
+    setFloatingChromaPositions(prev => ({ ...prev, [id]: position }))
+  }, [setFloatingChromaPositions])
+
+  const handleFloatingVideoPositionChange = useCallback((id: string, position: { x: number; y: number }) => {
+    setFloatingVideoPositions(prev => ({ ...prev, [id]: position }))
+  }, [setFloatingVideoPositions])
+
+  // Handle floating camera window size changes
+  const handleFloatingSnapshotSizeChange = useCallback((id: string, size: { width: number; height: number }) => {
+    setFloatingSnapshotSizes(prev => ({ ...prev, [id]: size }))
+  }, [setFloatingSnapshotSizes])
+
+  const handleFloatingChromaSizeChange = useCallback((id: string, size: { width: number; height: number }) => {
+    setFloatingChromaSizes(prev => ({ ...prev, [id]: size }))
+  }, [setFloatingChromaSizes])
+
+  const handleFloatingVideoSizeChange = useCallback((id: string, size: { width: number; height: number }) => {
+    setFloatingVideoSizes(prev => ({ ...prev, [id]: size }))
+  }, [setFloatingVideoSizes])
+
   const connectionStatus = isConnected ? 'Connected' : 'Reconnecting...'
 
   return (
@@ -1100,6 +1158,10 @@ export default function TaskManagerClient({
           placement={snapshotSettings.placement}
           timestamp={snapshotTimestamp}
           onCameraClose={handleRemoveCameraFromWindow}
+          savedPositions={floatingSnapshotPositions}
+          savedSizes={floatingSnapshotSizes}
+          onPositionChange={handleFloatingSnapshotPositionChange}
+          onSizeChange={handleFloatingSnapshotSizeChange}
         />
       )}
 
@@ -1109,6 +1171,10 @@ export default function TaskManagerClient({
           cameras={chromaCameraConfigs}
           placement={chromaSettings.placement}
           onCameraClose={handleCloseChromaWindow}
+          savedPositions={floatingChromaPositions}
+          savedSizes={floatingChromaSizes}
+          onPositionChange={handleFloatingChromaPositionChange}
+          onSizeChange={handleFloatingChromaSizeChange}
         />
       )}
 
@@ -1118,6 +1184,10 @@ export default function TaskManagerClient({
           cameras={videoCameraConfigs}
           placement={videoSettings.placement}
           onCameraClose={handleCloseVideoWindow}
+          savedPositions={floatingVideoPositions}
+          savedSizes={floatingVideoSizes}
+          onPositionChange={handleFloatingVideoPositionChange}
+          onSizeChange={handleFloatingVideoSizeChange}
         />
       )}
 

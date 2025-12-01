@@ -26,6 +26,8 @@ export interface FloatingWindowProps {
   maxHeight?: number
   onClose?: () => void
   onFocus?: (id: string) => void
+  onPositionChange?: (id: string, position: FloatingWindowPosition) => void
+  onSizeChange?: (id: string, size: FloatingWindowSize) => void
   zIndex?: number
   showControls?: boolean
   resizable?: boolean
@@ -94,6 +96,8 @@ export const FloatingWindow = memo(function FloatingWindow({
   maxHeight = 1080,
   onClose,
   onFocus,
+  onPositionChange,
+  onSizeChange,
   zIndex = 1000,
   showControls = true,
   resizable = true,
@@ -104,25 +108,41 @@ export const FloatingWindow = memo(function FloatingWindow({
   const [isMaximized, setIsMaximized] = useState(false)
   const previousState = useRef({ position, size })
 
+  // Update position when defaultPosition changes
+  useEffect(() => {
+    setPosition(defaultPosition)
+  }, [defaultPosition.x, defaultPosition.y])
+
+  // Update size when defaultSize changes
+  useEffect(() => {
+    setSize(defaultSize)
+  }, [defaultSize.width, defaultSize.height])
+
   const handleMouseDown = useCallback(() => {
     onFocus?.(id)
   }, [id, onFocus])
 
   const handleDragStop = useCallback((_e: unknown, d: { x: number; y: number }) => {
     if (!isMaximized) {
-      setPosition({ x: d.x, y: d.y })
+      const newPosition = { x: d.x, y: d.y }
+      setPosition(newPosition)
+      onPositionChange?.(id, newPosition)
     }
-  }, [isMaximized])
+  }, [isMaximized, id, onPositionChange])
 
   const handleResizeStop = useCallback((_e: unknown, _direction: unknown, ref: HTMLElement, _delta: unknown, pos: { x: number; y: number }) => {
     if (!isMaximized) {
-      setSize({
+      const newSize = {
         width: ref.offsetWidth,
         height: ref.offsetHeight,
-      })
-      setPosition(pos)
+      }
+      const newPosition = pos
+      setSize(newSize)
+      setPosition(newPosition)
+      onSizeChange?.(id, newSize)
+      onPositionChange?.(id, newPosition)
     }
-  }, [isMaximized])
+  }, [isMaximized, id, onSizeChange, onPositionChange])
 
   const handleMaximize = useCallback(() => {
     if (isMaximized) {
