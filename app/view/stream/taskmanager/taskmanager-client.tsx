@@ -39,6 +39,25 @@ type TabType = 'klipper' | 'model' | 'applications' | 'processes' | 'networking'
 
 const DEFAULT_DATABOX_ORDER: DataboxType[] = ['model-preview', 'print-job', 'temperatures', 'system', 'uptime', 'lifetime']
 
+// Helper function to map printer state to favicon suffix
+const getFaviconSuffix = (printState: string): string => {
+  switch (printState) {
+    case 'printing':
+      return 'printing'
+    case 'cancelled':
+      return 'cancelled'
+    case 'offline':
+    case 'error':
+      return 'offline'
+    case 'ready':
+      return 'ready'
+    case 'complete':
+    case 'paused':
+    default:
+      return 'ready'
+  }
+}
+
 interface SnapshotSettings {
   size: VideoSize
   placement: SnapshotPlacement
@@ -1146,7 +1165,7 @@ export default function TaskManagerClient({
         >
           <div className="flex items-center gap-2">
             <img 
-              src={`/favicon-${printerValues.printState}-48x48.png`}
+              src={`/favicon-${getFaviconSuffix(printerValues.printState)}-48x48.png`}
               alt="Printer Status"
               className="w-4 h-4"
               onError={(e) => {
