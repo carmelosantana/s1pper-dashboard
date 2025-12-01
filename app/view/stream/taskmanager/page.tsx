@@ -18,7 +18,7 @@ function ViewSkeleton() {
     <div 
       className="min-h-screen w-full flex items-center justify-center p-2"
       style={{
-        backgroundImage: 'url(/background/windows-xp-01.jpg)',
+        backgroundImage: 'url(/background/win-01.jpg)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}

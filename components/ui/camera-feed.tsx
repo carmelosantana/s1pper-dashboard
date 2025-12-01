@@ -17,6 +17,7 @@ export interface CameraFeedProps {
   badgePosition?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
   className?: string
   timestamp?: number // For snapshot refresh
+  fillContainer?: boolean // When true, fills parent container without aspect ratio constraint
 }
 
 // Camera feed component with badge overlay
@@ -32,8 +33,12 @@ export const CameraFeed = memo(function CameraFeed({
   badgePosition = 'top-left',
   className = '',
   timestamp,
+  fillContainer = false,
 }: CameraFeedProps) {
   const [hasError, setHasError] = useState(false)
+  
+  // Check if URL is empty (like chroma backgrounds)
+  const hasUrl = url && url.trim() !== ''
   
   const handleError = useCallback(() => {
     setHasError(true)
@@ -64,40 +69,43 @@ export const CameraFeed = memo(function CameraFeed({
 
   return (
     <div 
-      className={`camera-feed relative w-full overflow-hidden ${className}`}
+      className={`camera-feed relative w-full ${fillContainer ? 'h-full' : ''} ${className}`}
       style={{
         backgroundColor: chromaColor || '#000000',
-        aspectRatio: getAspectRatio(),
+        ...(fillContainer ? {} : { aspectRatio: getAspectRatio() }),
       }}
       data-camera-id={id}
     >
-      {type === 'video' ? (
-        <img
-          src={getSourceUrl()}
-          alt={`${name} live feed`}
-          className="w-full h-full object-cover"
-          onError={handleError}
-          onLoad={handleLoad}
-          style={{
-            display: hasError ? 'none' : 'block',
-          }}
-        />
-      ) : (
-        <img
-          src={getSourceUrl()}
-          alt={`${name} snapshot`}
-          className="w-full h-full object-cover"
-          loading="lazy"
-          onError={handleError}
-          onLoad={handleLoad}
-          style={{
-            display: hasError ? 'none' : 'block',
-          }}
-        />
+      {/* Only render img if we have a URL */}
+      {hasUrl && (
+        type === 'video' ? (
+          <img
+            src={getSourceUrl()}
+            alt=""
+            className="w-full h-full object-cover"
+            onError={handleError}
+            onLoad={handleLoad}
+            style={{
+              display: hasError ? 'none' : 'block',
+            }}
+          />
+        ) : (
+          <img
+            src={getSourceUrl()}
+            alt={`${name} snapshot`}
+            className="w-full h-full object-cover"
+            loading="lazy"
+            onError={handleError}
+            onLoad={handleLoad}
+            style={{
+              display: hasError ? 'none' : 'block',
+            }}
+          />
+        )
       )}
       
-      {/* Error state */}
-      {hasError && (
+      {/* Error state - only show if we have URL and it failed */}
+      {hasUrl && hasError && (
         <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-xs">
           <span>Camera unavailable</span>
         </div>

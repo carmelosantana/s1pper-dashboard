@@ -170,18 +170,6 @@ export const FloatingWindow = memo(function FloatingWindow({
           {showControls && (
             <div style={windowStyles.controls}>
               <button
-                onClick={handleMaximize}
-                style={windowStyles.controlButton}
-                className="hover:bg-white/10"
-                title={isMaximized ? 'Restore' : 'Maximize'}
-              >
-                {isMaximized ? (
-                  <Minimize2 className="w-3 h-3" />
-                ) : (
-                  <Maximize2 className="w-3 h-3" />
-                )}
-              </button>
-              <button
                 onClick={handleClose}
                 style={{
                   ...windowStyles.controlButton,
@@ -195,7 +183,7 @@ export const FloatingWindow = memo(function FloatingWindow({
           )}
         </div>
         {/* Content */}
-        <div style={windowStyles.content} className="flex-1">
+        <div style={{ ...windowStyles.content, minHeight: 0 }} className="flex-1 flex flex-col">
           {children}
         </div>
       </div>

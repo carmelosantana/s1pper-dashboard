@@ -112,6 +112,7 @@ export const FloatingCameraManager = memo(function FloatingCameraManager({
             timestamp={timestamp}
             showBadge={true}
             badgePosition="top-left"
+            fillContainer={true}
           />
         </FloatingWindow>
       ))}
@@ -124,19 +125,25 @@ export interface DockedCameraManagerProps {
   placement: CameraWindowPlacement
   timestamp?: number
   onCameraClose?: (id: string) => void
+  onOrderChange?: (orderedIds: string[]) => void
   maxWindows?: number
   className?: string
 }
 
-// Manager for docked camera windows
+// Manager for docked camera windows with drag-and-drop reordering
 export const DockedCameraManager = memo(function DockedCameraManager({
   cameras,
   placement,
   timestamp,
   onCameraClose,
+  onOrderChange,
   maxWindows = 3,
   className = '',
 }: DockedCameraManagerProps) {
+  // Track drag state
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
+  
   // Only render if in docked mode
   if (placement !== 'docked-above' && placement !== 'docked-below') {
     return null
@@ -153,6 +160,70 @@ export const DockedCameraManager = memo(function DockedCameraManager({
   const handleClose = useCallback((id: string) => {
     onCameraClose?.(id)
   }, [onCameraClose])
+
+  // Drag and drop handlers
+  const handleDragStart = useCallback((e: React.DragEvent, id: string) => {
+    setDraggedId(id)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', id)
+    // Add some opacity to the dragged element
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5'
+    }
+  }, [])
+
+  const handleDragEnd = useCallback((e: React.DragEvent) => {
+    setDraggedId(null)
+    setDragOverId(null)
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1'
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent, id: string) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (draggedId && id !== draggedId) {
+      setDragOverId(id)
+    }
+  }, [draggedId])
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverId(null)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent, dropTargetId: string) => {
+    e.preventDefault()
+    const sourceId = e.dataTransfer.getData('text/plain')
+    
+    if (!sourceId || sourceId === dropTargetId) {
+      setDraggedId(null)
+      setDragOverId(null)
+      return
+    }
+    
+    // Reorder the cameras
+    const currentOrder = visibleCameras.map(c => c.id)
+    const sourceIndex = currentOrder.indexOf(sourceId)
+    const targetIndex = currentOrder.indexOf(dropTargetId)
+    
+    if (sourceIndex === -1 || targetIndex === -1) {
+      setDraggedId(null)
+      setDragOverId(null)
+      return
+    }
+    
+    // Remove from source position and insert at target position
+    const newOrder = [...currentOrder]
+    newOrder.splice(sourceIndex, 1)
+    newOrder.splice(targetIndex, 0, sourceId)
+    
+    // Notify parent of the new order
+    onOrderChange?.(newOrder)
+    
+    setDraggedId(null)
+    setDragOverId(null)
+  }, [visibleCameras, onOrderChange])
   
   if (visibleCameras.length === 0) {
     return null
@@ -164,28 +235,50 @@ export const DockedCameraManager = memo(function DockedCameraManager({
       maxWindows={maxWindows}
       className={className}
     >
-      {visibleCameras.map(camera => (
-        <DockedWindow
+      {visibleCameras.map(camera => {
+        // Create drag handle props to pass to DockedWindow
+        const dragHandleProps = {
+          draggable: true,
+          onDragStart: (e: React.DragEvent) => handleDragStart(e, camera.id),
+          onDragEnd: handleDragEnd,
+        }
+        
+        return (
+        <div
           key={camera.id}
-          id={camera.id}
-          title={camera.name}
-          position={dockedPosition}
-          onClose={() => handleClose(camera.id)}
+          onDragOver={(e) => handleDragOver(e, camera.id)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, camera.id)}
+          className={`flex-1 min-w-0 transition-all duration-150 ${
+            dragOverId === camera.id ? 'ring-2 ring-blue-500 ring-offset-2' : ''
+          } ${draggedId === camera.id ? 'opacity-50' : ''}`}
         >
-          <CameraFeed
+          <DockedWindow
             id={camera.id}
-            name={camera.name}
-            url={camera.url}
-            type={camera.type}
-            fps={camera.fps}
-            aspectRatio={camera.aspectRatio}
-            chromaColor={camera.chromaColor}
-            timestamp={timestamp}
-            showBadge={true}
-            badgePosition="top-left"
-          />
-        </DockedWindow>
-      ))}
+            title={camera.name}
+            position={dockedPosition}
+            onClose={() => handleClose(camera.id)}
+            defaultHeight={300}
+            minHeight={150}
+            maxHeight={800}
+            dragHandleProps={dragHandleProps}
+          >
+            <CameraFeed
+              id={camera.id}
+              name={camera.name}
+              url={camera.url}
+              type={camera.type}
+              fps={camera.fps}
+              aspectRatio={camera.aspectRatio}
+              chromaColor={camera.chromaColor}
+              timestamp={timestamp}
+              showBadge={true}
+              badgePosition="top-left"
+              fillContainer={true}
+            />
+          </DockedWindow>
+        </div>
+      )})}
     </DockedWindowContainer>
   )
 })

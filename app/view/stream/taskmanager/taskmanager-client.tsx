@@ -18,9 +18,15 @@ import type { SystemStats, SystemInfo } from '@/app/api/printer/system-stats/rou
 // Local storage keys
 const SNAPSHOT_CAMERAS_KEY = 'taskmanager_snapshot_cameras'
 const CHROMA_CAMERAS_KEY = 'taskmanager_chroma_cameras'
+const VIDEO_CAMERAS_KEY = 'taskmanager_video_cameras'
 const SNAPSHOT_SETTINGS_KEY = 'taskmanager_snapshot_settings'
+const CHROMA_SETTINGS_KEY = 'taskmanager_chroma_settings'
+const VIDEO_SETTINGS_KEY = 'taskmanager_video_settings'
 const DATABOX_ORDER_KEY = 'taskmanager_databox_order'
 const MODEL_PREVIEW_DARK_BG_KEY = 'taskmanager_model_preview_dark_bg'
+const DOCKED_SNAPSHOT_ORDER_KEY = 'taskmanager_docked_snapshot_order'
+const DOCKED_CHROMA_ORDER_KEY = 'taskmanager_docked_chroma_order'
+const DOCKED_VIDEO_ORDER_KEY = 'taskmanager_docked_video_order'
 
 // Type definitions
 type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'console' | 'system' | 'uptime' | 'lifetime'
@@ -35,11 +41,19 @@ interface SnapshotSettings {
   placement: SnapshotPlacement
 }
 
+interface ChromaSettings {
+  placement: SnapshotPlacement
+}
+
+interface VideoSettings {
+  placement: SnapshotPlacement
+  size: VideoSize
+}
+
 interface ChromaCamera {
   id: string
   title: string
-  url: string
-  framerate: 15 | 30 | 60
+  framerate: 15 | 24 | 30 | 60
   chromaColor: 'green' | 'blue' | 'custom'
   customColor?: string
   size: VideoSize
@@ -95,28 +109,17 @@ const ChromaCameraForm = memo(function ChromaCameraForm({
         />
       </div>
       
-      {/* URL */}
-      <div className="mb-2">
-        <label className="block text-black text-[10px] mb-0.5">Stream URL</label>
-        <input
-          type="text"
-          value={camera.url}
-          onChange={(e) => onUpdate(camera.id, { url: e.target.value })}
-          className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
-          placeholder="http://..."
-        />
-      </div>
-      
       {/* Framerate, Chroma color and Size row */}
       <div className="grid grid-cols-3 gap-2">
         <div>
           <label className="block text-black text-[10px] mb-0.5">Framerate</label>
           <select
             value={camera.framerate}
-            onChange={(e) => onUpdate(camera.id, { framerate: parseInt(e.target.value) as 15 | 30 | 60 })}
+            onChange={(e) => onUpdate(camera.id, { framerate: parseInt(e.target.value) as 15 | 24 | 30 | 60 })}
             className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
           >
             <option value={15}>15 fps</option>
+            <option value={24}>24 fps</option>
             <option value={30}>30 fps</option>
             <option value={60}>60 fps</option>
           </select>
@@ -193,6 +196,7 @@ export default function TaskManagerClient({
   const [showOptionsMenu, setShowOptionsMenu] = useState(false)
   const [showChromaDialog, setShowChromaDialog] = useState(false)
   const [showSnapshotDialog, setShowSnapshotDialog] = useState(false)
+  const [showVideoDialog, setShowVideoDialog] = useState(false)
   const [showReorderDialog, setShowReorderDialog] = useState(false)
   const [isShuttingDown, setIsShuttingDown] = useState(false)
   
@@ -210,6 +214,18 @@ export default function TaskManagerClient({
     SNAPSHOT_SETTINGS_KEY,
     { size: 'responsive', placement: 'above' }
   )
+  const [chromaSettings, setChromaSettings] = useLocalStorageState<ChromaSettings>(
+    CHROMA_SETTINGS_KEY,
+    { placement: 'above' }
+  )
+  const [selectedVideoCameras, setSelectedVideoCameras] = useLocalStorageState<string[]>(
+    VIDEO_CAMERAS_KEY,
+    []
+  )
+  const [videoSettings, setVideoSettings] = useLocalStorageState<VideoSettings>(
+    VIDEO_SETTINGS_KEY,
+    { placement: 'above', size: 'responsive' }
+  )
   const [databoxOrder, setDataboxOrder] = useLocalStorageState<DataboxType[]>(
     DATABOX_ORDER_KEY,
     DEFAULT_DATABOX_ORDER,
@@ -218,6 +234,20 @@ export default function TaskManagerClient({
   const [modelPreviewDarkBg, setModelPreviewDarkBg] = useLocalStorageState<boolean>(
     MODEL_PREVIEW_DARK_BG_KEY,
     false
+  )
+  
+  // Docked camera order states
+  const [dockedSnapshotOrder, setDockedSnapshotOrder] = useLocalStorageState<string[]>(
+    DOCKED_SNAPSHOT_ORDER_KEY,
+    []
+  )
+  const [dockedChromaOrder, setDockedChromaOrder] = useLocalStorageState<string[]>(
+    DOCKED_CHROMA_ORDER_KEY,
+    []
+  )
+  const [dockedVideoOrder, setDockedVideoOrder] = useLocalStorageState<string[]>(
+    DOCKED_VIDEO_ORDER_KEY,
+    []
   )
   
   // Other state
@@ -440,7 +470,6 @@ export default function TaskManagerClient({
     const newCamera: ChromaCamera = {
       id: `chroma_${Date.now()}`,
       title: `Camera ${editingChromaCameras.length + 1}`,
-      url: '',
       framerate: 30,
       chromaColor: 'green',
       size: 'responsive',
@@ -466,6 +495,18 @@ export default function TaskManagerClient({
   const saveSnapshotSettings = useCallback((newSettings: Partial<SnapshotSettings>) => {
     setSnapshotSettings(prev => ({ ...prev, ...newSettings }))
   }, [setSnapshotSettings])
+
+  const handleVideoCameraSelectionChange = useCallback((cameraUid: string, checked: boolean) => {
+    if (checked) {
+      setSelectedVideoCameras(prev => [...prev, cameraUid])
+    } else {
+      setSelectedVideoCameras(prev => prev.filter(uid => uid !== cameraUid))
+    }
+  }, [setSelectedVideoCameras])
+
+  const saveVideoSettings = useCallback((newSettings: Partial<VideoSettings>) => {
+    setVideoSettings(prev => ({ ...prev, ...newSettings }))
+  }, [setVideoSettings])
 
   const handleDragStart = useCallback((databox: DataboxType) => {
     setDraggedDatabox(databox)
@@ -524,10 +565,20 @@ export default function TaskManagerClient({
     setShowOptionsMenu(false)
   }, [])
 
-  // Handle removing a camera from floating/docked view
-  const handleRemoveCameraFromWindow = useCallback((cameraId: string) => {
-    setSelectedSnapshotCameras(prev => prev.filter(uid => uid !== cameraId))
-  }, [setSelectedSnapshotCameras])
+  // Handle removing a camera from floating/docked view - change placement to 'above' instead
+  const handleRemoveCameraFromWindow = useCallback(() => {
+    setSnapshotSettings(prev => ({ ...prev, placement: 'above' }))
+  }, [setSnapshotSettings])
+
+  // Handle closing chroma window - change placement to 'above' instead
+  const handleCloseChromaWindow = useCallback(() => {
+    setChromaSettings(prev => ({ ...prev, placement: 'above' }))
+  }, [setChromaSettings])
+
+  // Handle closing video window - change placement to 'above' instead
+  const handleCloseVideoWindow = useCallback(() => {
+    setVideoSettings(prev => ({ ...prev, placement: 'above' }))
+  }, [setVideoSettings])
 
   // Convert selected snapshot cameras to CameraWindowConfig format
   const snapshotCameraConfigs: CameraWindowConfig[] = useMemo(() => {
@@ -550,13 +601,73 @@ export default function TaskManagerClient({
     return chromaCameras.map(camera => ({
       id: camera.id,
       name: camera.title,
-      url: camera.url,
+      url: '', // Chroma sections are just colored backgrounds, no URL needed
       type: 'video' as const,
       fps: camera.framerate,
       chromaColor: camera.chromaColor === 'custom' ? camera.customColor : 
-        camera.chromaColor === 'green' ? '#00FF00' : '#0000FF',
+        camera.chromaColor === 'green' ? '#00b140' : '#0047bb',
     }))
   }, [chromaCameras])
+
+  // Convert selected video cameras to CameraWindowConfig format
+  const videoCameraConfigs: CameraWindowConfig[] = useMemo(() => {
+    return selectedVideoCameras.map(cameraUid => {
+      const camera = availableWebcams.find(w => w.uid === cameraUid)
+      if (!camera) return null
+      return {
+        id: camera.uid,
+        name: camera.name,
+        // Always use the API proxy for video streams
+        url: `/api/camera/stream?uid=${cameraUid}`,
+        type: 'video' as const,
+        fps: 30, // Live video feed
+        aspectRatio: camera.aspect_ratio || '16:9',
+      }
+    }).filter(Boolean) as CameraWindowConfig[]
+  }, [selectedVideoCameras, availableWebcams])
+
+  // Helper function to sort configs by order array
+  const sortByOrder = useCallback((configs: CameraWindowConfig[], orderArray: string[]): CameraWindowConfig[] => {
+    if (orderArray.length === 0) return configs
+    
+    // Create a map of id to index in orderArray for efficient lookup
+    const orderMap = new Map(orderArray.map((id, index) => [id, index]))
+    
+    return [...configs].sort((a, b) => {
+      const aIndex = orderMap.get(a.id) ?? Infinity
+      const bIndex = orderMap.get(b.id) ?? Infinity
+      return aIndex - bIndex
+    })
+  }, [])
+
+  // Create ordered versions of camera configs for docked views
+  const orderedSnapshotCameraConfigs = useMemo(() => 
+    sortByOrder(snapshotCameraConfigs, dockedSnapshotOrder),
+    [snapshotCameraConfigs, dockedSnapshotOrder, sortByOrder]
+  )
+
+  const orderedChromaCameraConfigs = useMemo(() => 
+    sortByOrder(chromaCameraConfigs, dockedChromaOrder),
+    [chromaCameraConfigs, dockedChromaOrder, sortByOrder]
+  )
+
+  const orderedVideoCameraConfigs = useMemo(() => 
+    sortByOrder(videoCameraConfigs, dockedVideoOrder),
+    [videoCameraConfigs, dockedVideoOrder, sortByOrder]
+  )
+
+  // Handle docked camera order changes
+  const handleDockedSnapshotOrderChange = useCallback((newOrder: string[]) => {
+    setDockedSnapshotOrder(newOrder)
+  }, [setDockedSnapshotOrder])
+
+  const handleDockedChromaOrderChange = useCallback((newOrder: string[]) => {
+    setDockedChromaOrder(newOrder)
+  }, [setDockedChromaOrder])
+
+  const handleDockedVideoOrderChange = useCallback((newOrder: string[]) => {
+    setDockedVideoOrder(newOrder)
+  }, [setDockedVideoOrder])
 
   const connectionStatus = isConnected ? 'Connected' : 'Reconnecting...'
 
@@ -564,7 +675,7 @@ export default function TaskManagerClient({
     <div 
       className="min-h-screen w-full flex items-center justify-center p-2 md:p-4"
       style={{
-        backgroundImage: 'url(/background/windows-xp-01.jpg)',
+        backgroundImage: 'url(/background/win-01.jpg)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         fontFamily: 'Tahoma, "MS Sans Serif", Arial, sans-serif',
@@ -580,6 +691,41 @@ export default function TaskManagerClient({
         <p className="text-black text-[11px] mb-3">
           Add cameras for live video display with chroma key backgrounds.
         </p>
+        
+        {/* Placement dropdown */}
+        <div className="mb-3">
+          <label className="block text-black text-[10px] font-bold mb-0.5">Placement</label>
+          <select
+            value={chromaSettings.placement}
+            onChange={(e) => setChromaSettings({ placement: e.target.value as SnapshotPlacement })}
+            className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
+          >
+            <option value="above">Above Charts</option>
+            <option value="below">Below Charts</option>
+            <option value="floating">Floating Windows</option>
+            <option value="docked-above">Docked Above</option>
+            <option value="docked-below">Docked Below</option>
+          </select>
+        </div>
+        
+        {/* Floating/Docked info */}
+        {(chromaSettings.placement === 'floating' || 
+          chromaSettings.placement === 'docked-above' || 
+          chromaSettings.placement === 'docked-below') && (
+          <div className="mb-3 p-2 bg-[#FFFFCC] border border-[#808080] text-[10px] text-black">
+            {chromaSettings.placement === 'floating' ? (
+              <span>
+                📌 Floating windows can be moved and resized freely.
+                Click a window to bring it to front.
+              </span>
+            ) : (
+              <span>
+                📌 Docked windows appear {chromaSettings.placement === 'docked-above' ? 'above' : 'below'} the main window.
+                Up to 3 cameras can be displayed side by side.
+              </span>
+            )}
+          </div>
+        )}
         
         <div className="space-y-3">
           {editingChromaCameras.map((camera, index) => (
@@ -711,6 +857,109 @@ export default function TaskManagerClient({
         </div>
       </XPDialog>
 
+      {/* Video Cameras Configuration Dialog */}
+      <XPDialog
+        title="Video Feeds"
+        isOpen={showVideoDialog}
+        onClose={() => setShowVideoDialog(false)}
+      >
+        <p className="text-[11px] text-black mb-3">
+          Select cameras to display as live video feeds from the printer.
+        </p>
+        
+        <div className="mb-3">
+          <div className="text-black text-[10px] font-bold mb-1">Cameras</div>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {availableWebcams.length > 0 ? (
+              availableWebcams.map(camera => (
+                <label 
+                  key={camera.uid}
+                  className="flex items-center gap-2 px-2 py-1 text-[11px] text-black hover:bg-[#316AC5] hover:text-white cursor-pointer rounded"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedVideoCameras.includes(camera.uid)}
+                    onChange={(e) => handleVideoCameraSelectionChange(camera.uid, e.target.checked)}
+                    className="w-3 h-3"
+                  />
+                  <Camera className="w-3 h-3" />
+                  <span className="truncate">{camera.name}</span>
+                </label>
+              ))
+            ) : (
+              <div className="text-gray-500 italic text-[11px]">No cameras available</div>
+            )}
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div>
+            <label className="block text-black text-[10px] font-bold mb-0.5">Size</label>
+            <select
+              value={videoSettings.size}
+              onChange={(e) => saveVideoSettings({ size: e.target.value as VideoSize })}
+              className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
+            >
+              <option value="responsive">Responsive</option>
+              {videoSettings.placement === 'databoxes' ? (
+                <>
+                  <option value="small">Small (1 box)</option>
+                  <option value="large">Large (full row)</option>
+                </>
+              ) : (
+                <>
+                  <option value="small">Small (1 space)</option>
+                  <option value="medium">Medium (2 spaces)</option>
+                  <option value="large">Large (3 spaces)</option>
+                </>
+              )}
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-black text-[10px] font-bold mb-0.5">Placement</label>
+            <select
+              value={videoSettings.placement}
+              onChange={(e) => {
+                const newPlacement = e.target.value as SnapshotPlacement
+                saveVideoSettings({ placement: newPlacement, size: 'responsive' })
+              }}
+              className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
+            >
+              <option value="above">Above Charts</option>
+              <option value="below">Below Charts</option>
+              <option value="databoxes">In Data Boxes</option>
+              <option value="floating">Floating Windows</option>
+              <option value="docked-above">Docked Above</option>
+              <option value="docked-below">Docked Below</option>
+            </select>
+          </div>
+        </div>
+        
+        {/* Floating/Docked info */}
+        {(videoSettings.placement === 'floating' || 
+          videoSettings.placement === 'docked-above' || 
+          videoSettings.placement === 'docked-below') && (
+          <div className="mt-2 p-2 bg-[#FFFFCC] border border-[#808080] text-[10px] text-black">
+            {videoSettings.placement === 'floating' ? (
+              <span>
+                📌 Floating windows can be moved and resized freely.
+                Click a window to bring it to front.
+              </span>
+            ) : (
+              <span>
+                📌 Docked windows appear {videoSettings.placement === 'docked-above' ? 'above' : 'below'} the main window.
+                Up to 3 cameras can be displayed side by side.
+              </span>
+            )}
+          </div>
+        )}
+        
+        <div className="flex justify-end mt-3">
+          <XPButton onClick={() => setShowVideoDialog(false)}>Close</XPButton>
+        </div>
+      </XPDialog>
+
       {/* Reorder Databoxes Dialog */}
       <XPDialog
         title="Reorder Databoxes"
@@ -765,23 +1014,66 @@ export default function TaskManagerClient({
         </div>
       </XPDialog>
 
-      {/* Floating Camera Windows */}
-      <FloatingCameraManager
-        cameras={snapshotCameraConfigs}
-        placement={snapshotSettings.placement}
-        timestamp={snapshotTimestamp}
-        onCameraClose={handleRemoveCameraFromWindow}
-      />
+      {/* Floating Camera Windows - Snapshots */}
+      {snapshotSettings.placement === 'floating' && (
+        <FloatingCameraManager
+          cameras={snapshotCameraConfigs}
+          placement={snapshotSettings.placement}
+          timestamp={snapshotTimestamp}
+          onCameraClose={handleRemoveCameraFromWindow}
+        />
+      )}
+
+      {/* Floating Camera Windows - Chroma */}
+      {chromaSettings.placement === 'floating' && (
+        <FloatingCameraManager
+          cameras={chromaCameraConfigs}
+          placement={chromaSettings.placement}
+          onCameraClose={handleCloseChromaWindow}
+        />
+      )}
+
+      {/* Floating Camera Windows - Video */}
+      {videoSettings.placement === 'floating' && (
+        <FloatingCameraManager
+          cameras={videoCameraConfigs}
+          placement={videoSettings.placement}
+          onCameraClose={handleCloseVideoWindow}
+        />
+      )}
 
       {/* Main Layout Container - handles docked windows positioning */}
       <div className="w-full max-w-4xl flex flex-col gap-3">
-        {/* Docked Above */}
+        {/* Docked Above - Snapshots */}
         {snapshotSettings.placement === 'docked-above' && (
           <DockedCameraManager
-            cameras={snapshotCameraConfigs}
+            cameras={orderedSnapshotCameraConfigs}
             placement="docked-above"
             timestamp={snapshotTimestamp}
             onCameraClose={handleRemoveCameraFromWindow}
+            onOrderChange={handleDockedSnapshotOrderChange}
+            maxWindows={3}
+          />
+        )}
+
+        {/* Docked Above - Chroma */}
+        {chromaSettings.placement === 'docked-above' && (
+          <DockedCameraManager
+            cameras={orderedChromaCameraConfigs}
+            placement="docked-above"
+            onCameraClose={handleCloseChromaWindow}
+            onOrderChange={handleDockedChromaOrderChange}
+            maxWindows={3}
+          />
+        )}
+
+        {/* Docked Above - Video */}
+        {videoSettings.placement === 'docked-above' && (
+          <DockedCameraManager
+            cameras={orderedVideoCameraConfigs}
+            placement="docked-above"
+            onCameraClose={handleCloseVideoWindow}
+            onOrderChange={handleDockedVideoOrderChange}
             maxWindows={3}
           />
         )}
@@ -790,10 +1082,14 @@ export default function TaskManagerClient({
         <div 
           className="w-full flex flex-col shadow-2xl"
           style={{
-            height: snapshotSettings.placement === 'docked-above' || snapshotSettings.placement === 'docked-below' 
+            height: snapshotSettings.placement === 'docked-above' || snapshotSettings.placement === 'docked-below' ||
+                   chromaSettings.placement === 'docked-above' || chromaSettings.placement === 'docked-below' ||
+                   videoSettings.placement === 'docked-above' || videoSettings.placement === 'docked-below'
               ? 'calc(100vh - 200px)' 
               : 'calc(100vh - 32px)',
-            maxHeight: snapshotSettings.placement === 'docked-above' || snapshotSettings.placement === 'docked-below'
+            maxHeight: snapshotSettings.placement === 'docked-above' || snapshotSettings.placement === 'docked-below' ||
+                       chromaSettings.placement === 'docked-above' || chromaSettings.placement === 'docked-below' ||
+                       videoSettings.placement === 'docked-above' || videoSettings.placement === 'docked-below'
               ? 'calc(100vh - 200px)'
               : 'calc(100vh - 32px)',
             borderRadius: '8px 8px 4px 4px',
@@ -910,6 +1206,10 @@ export default function TaskManagerClient({
                   onClick={() => { setShowSnapshotDialog(true); setShowOptionsMenu(false) }}>
                   Snapshots...
                 </div>
+                <div className="px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                  onClick={() => { setShowVideoDialog(true); setShowOptionsMenu(false) }}>
+                  Video...
+                </div>
                 <div className="border-t border-[#808080] my-1" />
                 <div className="px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer"
                   onClick={() => { setShowReorderDialog(true); setShowOptionsMenu(false) }}>
@@ -998,10 +1298,13 @@ export default function TaskManagerClient({
               {activeTab === 'klipper' && (
                 <KlipperTab
                   chromaCameras={chromaCameras}
+                  chromaSettings={chromaSettings}
                   selectedSnapshotCameras={selectedSnapshotCameras}
                   availableWebcams={availableWebcams}
                   snapshotSettings={snapshotSettings}
                   snapshotTimestamp={snapshotTimestamp}
+                  selectedVideoCameras={selectedVideoCameras}
+                  videoSettings={videoSettings}
                   extruderHistory={extruderHistory}
                   extruderTargetHistory={extruderTargetHistory}
                   bedHistory={bedHistory}
@@ -1112,13 +1415,36 @@ export default function TaskManagerClient({
         </div>
       </div>
 
-        {/* Docked Below */}
+        {/* Docked Below - Snapshots */}
         {snapshotSettings.placement === 'docked-below' && (
           <DockedCameraManager
-            cameras={snapshotCameraConfigs}
+            cameras={orderedSnapshotCameraConfigs}
             placement="docked-below"
             timestamp={snapshotTimestamp}
             onCameraClose={handleRemoveCameraFromWindow}
+            onOrderChange={handleDockedSnapshotOrderChange}
+            maxWindows={3}
+          />
+        )}
+
+        {/* Docked Below - Chroma */}
+        {chromaSettings.placement === 'docked-below' && (
+          <DockedCameraManager
+            cameras={orderedChromaCameraConfigs}
+            placement="docked-below"
+            onCameraClose={handleCloseChromaWindow}
+            onOrderChange={handleDockedChromaOrderChange}
+            maxWindows={3}
+          />
+        )}
+
+        {/* Docked Below - Video */}
+        {videoSettings.placement === 'docked-below' && (
+          <DockedCameraManager
+            cameras={orderedVideoCameraConfigs}
+            placement="docked-below"
+            onCameraClose={handleCloseVideoWindow}
+            onOrderChange={handleDockedVideoOrderChange}
             maxWindows={3}
           />
         )}

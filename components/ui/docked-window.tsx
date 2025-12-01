@@ -1,7 +1,8 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useState, useCallback } from 'react'
 import { X } from 'lucide-react'
+import { Resizable } from 're-resizable'
 
 export type DockedPosition = 'above' | 'below'
 
@@ -12,6 +13,11 @@ export interface DockedWindowProps {
   onClose?: () => void
   position: DockedPosition
   className?: string
+  defaultHeight?: number
+  minHeight?: number
+  maxHeight?: number
+  onHeightChange?: (height: number) => void
+  dragHandleProps?: React.HTMLAttributes<HTMLDivElement>
 }
 
 export interface DockedWindowContainerProps {
@@ -62,25 +68,69 @@ const windowStyles = {
   content: {
     backgroundColor: '#000',
     overflow: 'hidden',
+    position: 'relative' as const,
   },
 }
 
-// Individual docked window
+// Individual docked window with resizable height
 export const DockedWindow = memo(function DockedWindow({
   id,
   title,
   children,
   onClose,
+  position,
   className = '',
+  defaultHeight = 300,
+  minHeight = 150,
+  maxHeight = 800,
+  onHeightChange,
+  dragHandleProps,
 }: DockedWindowProps) {
+  const [height, setHeight] = useState(defaultHeight)
+
+  const handleResizeStop = useCallback((_e: unknown, _direction: unknown, _ref: unknown, d: { height: number }) => {
+    const newHeight = height + d.height
+    setHeight(newHeight)
+    onHeightChange?.(newHeight)
+  }, [height, onHeightChange])
+
   return (
-    <div 
-      className={`docked-window flex-1 min-w-0 ${className}`}
-      style={windowStyles.container}
-      data-window-id={id}
+    <Resizable
+      size={{ width: '100%', height }}
+      onResizeStop={handleResizeStop}
+      minHeight={minHeight}
+      maxHeight={maxHeight}
+      enable={{
+        top: position === 'below',
+        right: false,
+        bottom: position === 'above',
+        left: false,
+        topRight: false,
+        bottomRight: false,
+        bottomLeft: false,
+        topLeft: false,
+      }}
+      handleStyles={{
+        top: {
+          cursor: 'ns-resize',
+          height: '8px',
+          top: '-4px',
+        },
+        bottom: {
+          cursor: 'ns-resize',
+          height: '8px',
+          bottom: '-4px',
+        },
+      }}
+      className={`flex-1 min-w-0 ${className}`}
     >
+      <div 
+        className="docked-window h-full flex flex-col"
+        style={windowStyles.container}
+        data-window-id={id}
+      >
       {/* Header */}
-      <div style={windowStyles.header}>
+      <div style={windowStyles.header} {...dragHandleProps} className="cursor-grab active:cursor-grabbing">
         <span style={windowStyles.title}>{title}</span>
         {onClose && (
           <button
@@ -94,10 +144,11 @@ export const DockedWindow = memo(function DockedWindow({
         )}
       </div>
       {/* Content */}
-      <div style={windowStyles.content}>
+      <div style={windowStyles.content} className="flex-1 flex flex-col overflow-hidden">
         {children}
       </div>
-    </div>
+      </div>
+    </Resizable>
   )
 })
 

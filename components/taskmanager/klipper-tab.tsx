@@ -23,14 +23,18 @@ type SnapshotPlacement = 'above' | 'below' | 'databoxes' | 'floating' | 'docked-
 interface ChromaCamera {
   id: string
   title: string
-  url: string
-  framerate: 15 | 30 | 60
+  framerate: 15 | 24 | 30 | 60
   chromaColor: 'green' | 'blue' | 'custom'
   customColor?: string
   size: VideoSize
 }
 
 interface SnapshotSettings {
+  size: VideoSize
+  placement: SnapshotPlacement
+}
+
+interface VideoSettings {
   size: VideoSize
   placement: SnapshotPlacement
 }
@@ -53,13 +57,20 @@ interface PrinterValues {
   currentSpeed: number
 }
 
+interface ChromaSettings {
+  placement: SnapshotPlacement
+}
+
 interface KlipperTabProps {
   // Camera data
   chromaCameras: ChromaCamera[]
+  chromaSettings: ChromaSettings
   selectedSnapshotCameras: string[]
   availableWebcams: WebcamConfig[]
   snapshotSettings: SnapshotSettings
   snapshotTimestamp: number
+  selectedVideoCameras: string[]
+  videoSettings: VideoSettings
   
   // Chart history data
   extruderHistory: number[]
@@ -94,10 +105,10 @@ interface KlipperTabProps {
 // Chroma color helper
 const getChromaColorValue = (camera: ChromaCamera): string => {
   switch (camera.chromaColor) {
-    case 'green': return '#00FF00'
-    case 'blue': return '#0000FF'
-    case 'custom': return camera.customColor || '#00FF00'
-    default: return '#00FF00'
+    case 'green': return '#00b140'
+    case 'blue': return '#0047bb'
+    case 'custom': return camera.customColor || '#00b140'
+    default: return '#00b140'
   }
 }
 
@@ -255,11 +266,19 @@ const SnapshotSection = memo(function SnapshotSection({
 
 // Live Video Section Component - memoized
 const LiveVideoSection = memo(function LiveVideoSection({
-  chromaCameras
+  chromaCameras,
+  chromaSettings
 }: {
   chromaCameras: ChromaCamera[]
+  chromaSettings: ChromaSettings
 }) {
+  // Don't render if no cameras or if using floating/docked placement
   if (chromaCameras.length === 0) return null
+  if (chromaSettings.placement === 'floating' || 
+      chromaSettings.placement === 'docked-above' || 
+      chromaSettings.placement === 'docked-below') {
+    return null
+  }
   
   return (
     <div className="mb-3">
@@ -288,10 +307,6 @@ const LiveVideoSection = memo(function LiveVideoSection({
               <span className="truncate">{camera.title}</span>
               <div className="flex items-center gap-1">
                 <span 
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: getChromaColorValue(camera) }}
-                />
-                <span 
                   className="text-[8px] bg-[#316AC5] text-white px-1.5 py-0.5 rounded"
                   style={{ fontSize: '8px' }}
                 >
@@ -306,20 +321,149 @@ const LiveVideoSection = memo(function LiveVideoSection({
                 aspectRatio: '16/9'
               }}
             >
-              {camera.url && (
+              {/* Chroma section is just a solid color background for video overlay */}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+})
+
+// Video Section Component - memoized (live video feeds from cameras)
+const VideoSection = memo(function VideoSection({
+  selectedVideoCameras,
+  availableWebcams,
+  videoSettings,
+  isDataboxStyle = false
+}: {
+  selectedVideoCameras: string[]
+  availableWebcams: WebcamConfig[]
+  videoSettings: VideoSettings
+  isDataboxStyle?: boolean
+}) {
+  // Don't render if no cameras selected or if using floating/docked placement
+  if (selectedVideoCameras.length === 0) return null
+  if (videoSettings.placement === 'floating' || 
+      videoSettings.placement === 'docked-above' || 
+      videoSettings.placement === 'docked-below') {
+    return null
+  }
+  
+  // Databox style: render as individual databox cards in the stats grid
+  if (isDataboxStyle) {
+    const databoxSizeClass = getDataboxSizeSpan(videoSettings.size)
+    
+    return (
+      <>
+        {selectedVideoCameras.map(cameraUid => {
+          const camera = availableWebcams.find(w => w.uid === cameraUid)
+          if (!camera) return null
+          
+          return (
+            <div 
+              key={cameraUid}
+              className={`border p-0 overflow-hidden ${databoxSizeClass}`}
+              style={{ 
+                borderColor: '#919B9C',
+                boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
+              }}
+            >
+              <div className="font-bold text-black px-2 py-1 flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  <Video className="w-3 h-3" />
+                  <span className="truncate text-[11px]">{camera.name}</span>
+                </div>
+                <span 
+                  className="text-[8px] bg-[#316AC5] text-white px-1 py-0.5 rounded"
+                  style={{ fontSize: '8px' }}
+                >
+                  live
+                </span>
+              </div>
+              <div 
+                className="relative w-full"
+                style={{ 
+                  backgroundColor: '#000000',
+                  aspectRatio: camera.aspect_ratio === '16:9' ? '16/9' : '4/3'
+                }}
+              >
                 <img
-                  src={camera.url}
-                  alt={`${camera.title} feed`}
+                  src={`/api/camera/stream?uid=${cameraUid}`}
+                  alt={camera.name}
                   className="w-full h-full object-cover"
                   loading="lazy"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = 'none'
                   }}
                 />
-              )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
+      </>
+    )
+  }
+  
+  // Standard style (above/below)
+  const chartsSizeClass = getChartsSizeSpan(videoSettings.size)
+  
+  return (
+    <div className="mb-3">
+      <div className="text-black font-bold mb-2 flex items-center gap-2">
+        <Video className="w-4 h-4" />
+        Live Video
+      </div>
+      <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+        {selectedVideoCameras.map(cameraUid => {
+          const camera = availableWebcams.find(w => w.uid === cameraUid)
+          if (!camera) return null
+          
+          return (
+            <div 
+              key={cameraUid}
+              className={chartsSizeClass}
+              style={{ 
+                border: '1px solid #919B9C',
+                boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
+              }}
+            >
+              <div 
+                className="px-2 py-1 text-black font-bold flex items-center justify-between"
+                style={{
+                  backgroundColor: '#D4D0C8',
+                  borderBottom: '1px solid #808080',
+                  boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
+                }}
+              >
+                <span className="truncate">{camera.name}</span>
+                <span 
+                  className="text-[8px] bg-[#316AC5] text-white px-1.5 py-0.5 rounded"
+                  style={{ fontSize: '8px' }}
+                >
+                  live
+                </span>
+              </div>
+              <div 
+                className="relative"
+                style={{ 
+                  backgroundColor: '#000000',
+                  aspectRatio: camera.aspect_ratio === '16:9' ? '16/9' : '4/3'
+                }}
+              >
+                <img
+                  src={`/api/camera/stream?uid=${cameraUid}`}
+                  alt={camera.name}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -712,10 +856,13 @@ const LifetimeDatabox = memo(function LifetimeDatabox({
 // Main Klipper Tab Component
 export const KlipperTab = memo(function KlipperTab({
   chromaCameras,
+  chromaSettings,
   selectedSnapshotCameras,
   availableWebcams,
   snapshotSettings,
   snapshotTimestamp,
+  selectedVideoCameras,
+  videoSettings,
   extruderHistory,
   extruderTargetHistory,
   bedHistory,
@@ -821,8 +968,17 @@ export const KlipperTab = memo(function KlipperTab({
   
   return (
     <div className="p-3 font-['Tahoma'] text-xs">
-      {/* Live Video Section */}
-      <LiveVideoSection chromaCameras={chromaCameras} />
+      {/* Live Video Section (Chroma) */}
+      <LiveVideoSection chromaCameras={chromaCameras} chromaSettings={chromaSettings} />
+
+      {/* Video placement: above */}
+      {videoSettings.placement === 'above' && (
+        <VideoSection
+          selectedVideoCameras={selectedVideoCameras}
+          availableWebcams={availableWebcams}
+          videoSettings={videoSettings}
+        />
+      )}
 
       {/* Snapshot placement: above */}
       {snapshotSettings.placement === 'above' && (
@@ -844,6 +1000,15 @@ export const KlipperTab = memo(function KlipperTab({
         bedPower={printerValues.bedPower}
       />
 
+      {/* Video placement: below */}
+      {videoSettings.placement === 'below' && (
+        <VideoSection
+          selectedVideoCameras={selectedVideoCameras}
+          availableWebcams={availableWebcams}
+          videoSettings={videoSettings}
+        />
+      )}
+
       {/* Snapshot placement: below */}
       {snapshotSettings.placement === 'below' && (
         <SnapshotSection
@@ -858,6 +1023,16 @@ export const KlipperTab = memo(function KlipperTab({
       <div className="grid grid-cols-3 gap-3">
         {databoxOrder.map(renderDatabox)}
         
+        {/* Video cameras as databoxes (when placement is 'databoxes') */}
+        {videoSettings.placement === 'databoxes' && (
+          <VideoSection
+            selectedVideoCameras={selectedVideoCameras}
+            availableWebcams={availableWebcams}
+            videoSettings={videoSettings}
+            isDataboxStyle
+          />
+        )}
+
         {/* Snapshot cameras as databoxes (when placement is 'databoxes') */}
         {snapshotSettings.placement === 'databoxes' && (
           <SnapshotSection

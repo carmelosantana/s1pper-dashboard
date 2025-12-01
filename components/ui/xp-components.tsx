@@ -383,8 +383,8 @@ export const XPDialog = memo(function XPDialog({
   
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+      className="fixed inset-0 flex items-center justify-center"
+      style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 9999 }}
     >
       <div 
         className={`${width} shadow-lg`}
