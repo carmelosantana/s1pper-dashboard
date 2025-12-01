@@ -101,6 +101,27 @@ async function fetchSystemStats(): Promise<{ stats: SystemStats; info: SystemInf
       ? procStats.moonraker_stats[procStats.moonraker_stats.length - 1]
       : procStats.moonraker_stats
 
+    // Calculate Moonraker uptime from the stats array
+    // The 'time' field is a Unix timestamp, not uptime
+    // We calculate uptime as the difference between the latest and earliest timestamps
+    // Note: moonraker_stats only keeps recent samples, so this gives us process running time
+    let moonrakerUptime = 0
+    if (Array.isArray(procStats.moonraker_stats) && procStats.moonraker_stats.length > 0) {
+      const latestTime = procStats.moonraker_stats[procStats.moonraker_stats.length - 1]?.time || 0
+      const earliestTime = procStats.moonraker_stats[0]?.time || latestTime
+      // The stats array typically spans about 10 seconds of samples
+      // For actual Moonraker uptime, we use system_uptime as a proxy since Moonraker
+      // starts with the system in most setups, or we could track start time separately
+      // For now, use the time since the earliest sample as a minimum running indicator
+      moonrakerUptime = latestTime - earliestTime
+      
+      // If the stats array only gives us a few seconds, fall back to system uptime
+      // as Moonraker typically runs since system boot
+      if (moonrakerUptime < 60) {
+        moonrakerUptime = procStats.system_uptime || 0
+      }
+    }
+
     // Transform system CPU usage
     const systemCpuUsage = procStats.system_cpu_usage || {}
     const totalCpuUsage = systemCpuUsage.cpu || 0
@@ -137,7 +158,7 @@ async function fetchSystemStats(): Promise<{ stats: SystemStats; info: SystemInf
     
     const stats: SystemStats = {
       moonraker: {
-        time: moonrakerStats?.time || Date.now() / 1000,
+        time: moonrakerUptime,
         cpuUsage: moonrakerStats?.cpu_usage || 0,
         memory: memUsed,
         memUnits: moonrakerStats?.mem_units || 'kB'

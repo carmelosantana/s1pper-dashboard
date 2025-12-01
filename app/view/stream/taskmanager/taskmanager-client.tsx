@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
-import { Minus, Maximize2, X, ChevronDown, Camera, Plus, Trash2, Video, Image, Clock } from 'lucide-react'
+import { Minus, Maximize2, X, ChevronDown, Camera, Plus, Trash2, Video, Image, Clock, GripVertical, ToggleLeft, ToggleRight } from 'lucide-react'
 import { usePrinterData } from '@/lib/hooks/use-printer-data'
 import type { PrinterStatus, WebcamConfig, LifetimeStats } from '@/lib/types'
 import type { SystemStats, SystemInfo } from '@/app/api/printer/system-stats/route'
@@ -10,9 +10,18 @@ import type { SystemStats, SystemInfo } from '@/app/api/printer/system-stats/rou
 const SNAPSHOT_CAMERAS_KEY = 'taskmanager_snapshot_cameras'
 const CHROMA_CAMERAS_KEY = 'taskmanager_chroma_cameras'
 const SNAPSHOT_SETTINGS_KEY = 'taskmanager_snapshot_settings'
+const DATABOX_ORDER_KEY = 'taskmanager_databox_order'
+const MODEL_PREVIEW_DARK_BG_KEY = 'taskmanager_model_preview_dark_bg'
+
+// Default databox order: Model Preview, Print Job, Temperatures, System, Uptime, Lifetime
+// Snapshot is always added at the end if enabled
+type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'system' | 'uptime' | 'lifetime'
+const DEFAULT_DATABOX_ORDER: DataboxType[] = ['model-preview', 'print-job', 'temperatures', 'system', 'uptime', 'lifetime']
 
 // Size options for video feeds
-type VideoSize = 'small' | 'medium' | 'large'
+// For Above/Below Charts: responsive, small (1 space), medium (2 spaces), large (3 spaces)
+// For In Databoxes: responsive, small (1 databox width), large (full row width)
+type VideoSize = 'responsive' | 'small' | 'medium' | 'large'
 
 // Snapshot placement options
 type SnapshotPlacement = 'above' | 'below' | 'databoxes'
@@ -395,13 +404,19 @@ export default function TaskManagerClient({
   // Snapshot dialog state
   const [showSnapshotDialog, setShowSnapshotDialog] = useState(false)
   const [snapshotSettings, setSnapshotSettings] = useState<SnapshotSettings>({
-    size: 'small',
+    size: 'responsive',
     placement: 'above'
   })
   
   // Lifetime stats and model thumbnail state
   const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats | null>(null)
   const [modelThumbnail, setModelThumbnail] = useState<string | null>(null)
+  const [modelPreviewDarkBg, setModelPreviewDarkBg] = useState<boolean>(false) // Default to transparent
+  
+  // Databox ordering state
+  const [databoxOrder, setDataboxOrder] = useState<DataboxType[]>(DEFAULT_DATABOX_ORDER)
+  const [showReorderDialog, setShowReorderDialog] = useState(false)
+  const [draggedDatabox, setDraggedDatabox] = useState<DataboxType | null>(null)
   
   // Check if we're in development mode
   const isDevelopment = process.env.NODE_ENV === 'development'
@@ -522,6 +537,26 @@ export default function TaskManagerClient({
       }
     }
     
+    // Load saved databox order from localStorage
+    const savedDataboxOrder = localStorage.getItem(DATABOX_ORDER_KEY)
+    if (savedDataboxOrder) {
+      try {
+        const parsed = JSON.parse(savedDataboxOrder)
+        // Validate that all required databoxes are present
+        if (Array.isArray(parsed) && parsed.length === DEFAULT_DATABOX_ORDER.length) {
+          setDataboxOrder(parsed)
+        }
+      } catch (e) {
+        console.error('Failed to parse saved databox order:', e)
+      }
+    }
+    
+    // Load saved model preview dark background setting from localStorage
+    const savedModelPreviewDarkBg = localStorage.getItem(MODEL_PREVIEW_DARK_BG_KEY)
+    if (savedModelPreviewDarkBg) {
+      setModelPreviewDarkBg(savedModelPreviewDarkBg === 'true')
+    }
+    
     // Fetch available webcams
     const fetchWebcams = async () => {
       try {
@@ -635,7 +670,7 @@ export default function TaskManagerClient({
       url: '',
       framerate: 30,
       chromaColor: 'green',
-      size: 'small',
+      size: 'responsive',
     }
     setEditingChromaCameras(prev => [...prev, newCamera])
   }, [editingChromaCameras.length])
@@ -666,9 +701,31 @@ export default function TaskManagerClient({
     }
   }, [])
 
-  // Get grid column span based on size
+  // Get grid column span based on size for Above/Below Charts placement
+  const getChartsSizeSpan = useCallback((size: VideoSize): string => {
+    switch (size) {
+      case 'responsive': return '' // Default responsive behavior
+      case 'small': return '' // 1 space
+      case 'medium': return 'sm:col-span-2' // 2 spaces
+      case 'large': return 'sm:col-span-3' // 3 spaces (full row)
+      default: return ''
+    }
+  }, [])
+
+  // Get grid column span based on size for In Databoxes placement
+  const getDataboxSizeSpan = useCallback((size: VideoSize): string => {
+    switch (size) {
+      case 'responsive': return '' // Default responsive behavior (1 databox width)
+      case 'small': return '' // 1 databox width
+      case 'large': return 'col-span-3' // Full row width (3 columns)
+      default: return ''
+    }
+  }, [])
+
+  // Get grid column span based on size (for Chroma - Above/Below style)
   const getSizeSpan = useCallback((size: VideoSize): string => {
     switch (size) {
+      case 'responsive': return ''
       case 'small': return ''
       case 'medium': return 'sm:col-span-2'
       case 'large': return 'sm:col-span-3'
@@ -683,6 +740,53 @@ export default function TaskManagerClient({
       localStorage.setItem(SNAPSHOT_SETTINGS_KEY, JSON.stringify(updated))
       return updated
     })
+  }, [])
+
+  // Databox reorder handlers
+  const handleDragStart = useCallback((databox: DataboxType) => {
+    setDraggedDatabox(databox)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+  }, [])
+
+  const handleDrop = useCallback((targetDatabox: DataboxType) => {
+    if (!draggedDatabox || draggedDatabox === targetDatabox) return
+    
+    setDataboxOrder(prev => {
+      const newOrder = [...prev]
+      const draggedIndex = newOrder.indexOf(draggedDatabox)
+      const targetIndex = newOrder.indexOf(targetDatabox)
+      
+      // Remove dragged item and insert at target position
+      newOrder.splice(draggedIndex, 1)
+      newOrder.splice(targetIndex, 0, draggedDatabox)
+      
+      // Save to localStorage
+      localStorage.setItem(DATABOX_ORDER_KEY, JSON.stringify(newOrder))
+      
+      return newOrder
+    })
+    setDraggedDatabox(null)
+  }, [draggedDatabox])
+
+  const resetDataboxOrder = useCallback(() => {
+    setDataboxOrder(DEFAULT_DATABOX_ORDER)
+    localStorage.setItem(DATABOX_ORDER_KEY, JSON.stringify(DEFAULT_DATABOX_ORDER))
+  }, [])
+
+  // Get display name for databox type
+  const getDataboxDisplayName = useCallback((type: DataboxType): string => {
+    switch (type) {
+      case 'model-preview': return 'Model Preview'
+      case 'print-job': return 'Print Job'
+      case 'temperatures': return 'Temperatures'
+      case 'system': return 'System'
+      case 'uptime': return 'Uptime'
+      case 'lifetime': return 'Lifetime'
+      default: return type
+    }
   }, [])
 
   const stats = systemStats
@@ -870,18 +974,11 @@ export default function TaskManagerClient({
     const renderSnapshotSection = (isDataboxStyle: boolean = false) => {
       if (selectedSnapshotCameras.length === 0) return null
       
-      // Get the grid span class based on global snapshot size
-      const getSnapshotSizeSpan = () => {
-        switch (snapshotSettings.size) {
-          case 'small': return ''
-          case 'medium': return 'sm:col-span-2'
-          case 'large': return 'sm:col-span-3'
-          default: return ''
-        }
-      }
-      
       // Databox style: render as individual databox cards in the stats grid
       if (isDataboxStyle) {
+        // Get size class for databox placement
+        const databoxSizeClass = getDataboxSizeSpan(snapshotSettings.size)
+        
         return (
           <>
             {selectedSnapshotCameras.map(cameraUid => {
@@ -891,7 +988,7 @@ export default function TaskManagerClient({
               return (
                 <div 
                   key={cameraUid}
-                  className="border p-0 overflow-hidden"
+                  className={`border p-0 overflow-hidden ${databoxSizeClass}`}
                   style={{ 
                     borderColor: '#919B9C',
                     boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
@@ -934,7 +1031,9 @@ export default function TaskManagerClient({
         )
       }
       
-      // Standard style (above/below)
+      // Standard style (above/below) - use charts size function
+      const chartsSizeClass = getChartsSizeSpan(snapshotSettings.size)
+      
       return (
         <div className="mb-3">
           <div className="text-black font-bold mb-2 flex items-center gap-2">
@@ -949,7 +1048,7 @@ export default function TaskManagerClient({
               return (
                 <div 
                   key={cameraUid}
-                  className={getSnapshotSizeSpan()}
+                  className={chartsSizeClass}
                   style={{ 
                     border: '1px solid #919B9C',
                     boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
@@ -1134,210 +1233,192 @@ export default function TaskManagerClient({
       {/* Snapshot placement: below */}
       {snapshotSettings.placement === 'below' && renderSnapshotSection()}
 
-      {/* Bottom stats boxes - 3 columns like XP */}
-      {/* When 'databoxes' placement is selected, snapshots appear here as databox cards */}
+      {/* Databoxes - ordered according to user preference */}
       <div className="grid grid-cols-3 gap-3">
-        {/* Snapshot cameras as databoxes (when placement is 'databoxes') */}
-        {snapshotSettings.placement === 'databoxes' && renderSnapshotSection(true)}
+        {databoxOrder.map((databoxType) => {
+          const databoxStyle = {
+            borderColor: '#919B9C',
+            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
+          }
+          
+          switch (databoxType) {
+            case 'model-preview':
+              return (
+                <div 
+                  key={databoxType}
+                  className="border p-0 overflow-hidden"
+                  style={{
+                    ...databoxStyle,
+                    backgroundColor: modelPreviewDarkBg ? '#000000' : 'transparent'
+                  }}
+                >
+                  <div className="font-bold text-black px-2 py-1 flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <Image className="w-3 h-3" />
+                      <span>Model Preview</span>
+                    </div>
+                    {/* Toggle for dark background */}
+                    <button
+                      onClick={() => {
+                        const newValue = !modelPreviewDarkBg
+                        setModelPreviewDarkBg(newValue)
+                        localStorage.setItem(MODEL_PREVIEW_DARK_BG_KEY, String(newValue))
+                      }}
+                      className="flex items-center"
+                      title={modelPreviewDarkBg ? 'Disable dark background' : 'Enable dark background'}
+                    >
+                      {modelPreviewDarkBg ? (
+                        <ToggleRight className="w-4 h-4 text-[#316AC5]" />
+                      ) : (
+                        <ToggleLeft className="w-4 h-4 text-gray-400" />
+                      )}
+                    </button>
+                  </div>
+                  <div 
+                    className="relative flex items-center justify-center"
+                    style={{ 
+                      backgroundColor: modelPreviewDarkBg ? '#000000' : 'transparent',
+                      minHeight: '80px',
+                      aspectRatio: '1/1',
+                      maxHeight: '120px'
+                    }}
+                  >
+                    {modelThumbnail ? (
+                      <img
+                        src={modelThumbnail}
+                        alt="Model preview"
+                        className="max-w-full max-h-full object-contain"
+                        style={{ margin: 'auto' }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = 'none'
+                        }}
+                      />
+                    ) : (
+                      <div className="text-gray-500 text-[10px] text-center p-2">
+                        {filename !== 'No active print' ? 'No preview' : 'No print active'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            
+            case 'print-job':
+              return (
+                <div 
+                  key={databoxType}
+                  className="border p-2"
+                  style={databoxStyle}
+                >
+                  <div className="font-bold text-black mb-1">Print Job</div>
+                  <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
+                    <span>File</span>
+                    <span className="text-right truncate" title={filename}>{filename.length > 10 ? filename.substring(0, 10) + '...' : filename}</span>
+                    <span>Progress</span>
+                    <span className="text-right">{printProgress.toFixed(0)}%</span>
+                    {totalLayers > 0 && (
+                      <>
+                        <span>Layer</span>
+                        <span className="text-right">{currentLayer} / {totalLayers}</span>
+                      </>
+                    )}
+                    <span>Elapsed</span>
+                    <span className="text-right">{formatTime(printTime)}</span>
+                    <span>Remaining</span>
+                    <span className="text-right">{formatTime(estimatedTimeLeft)}</span>
+                    <span>Filament</span>
+                    <span className="text-right">{formatFilament(filamentUsed)}</span>
+                    <span>Speed</span>
+                    <span className="text-right">{currentSpeed} mm/s</span>
+                  </div>
+                </div>
+              )
+            
+            case 'temperatures':
+              return (
+                <div 
+                  key={databoxType}
+                  className="border p-2"
+                  style={databoxStyle}
+                >
+                  <div className="font-bold text-black mb-1">Temperatures (°C)</div>
+                  <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
+                    <span>Hotend</span>
+                    <span className="text-right">{extruderActual.toFixed(0)} / {extruderTarget.toFixed(0)}</span>
+                    <span>Bed</span>
+                    <span className="text-right">{bedActual.toFixed(0)} / {bedTarget.toFixed(0)}</span>
+                    <span>CPU</span>
+                    <span className="text-right">{stats?.system?.cpuTemp?.toFixed(0) || 'N/A'}°C</span>
+                  </div>
+                </div>
+              )
+            
+            case 'system':
+              return (
+                <div 
+                  key={databoxType}
+                  className="border p-2"
+                  style={databoxStyle}
+                >
+                  <div className="font-bold text-black mb-1">System</div>
+                  <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
+                    <span>CPU</span>
+                    <span className="text-right">{((stats?.system?.cpuUsage?.total || 0)).toFixed(0)}%</span>
+                    <span>Memory</span>
+                    <span className="text-right">{formatBytes(stats?.system?.memory?.used || 0)}</span>
+                    <span>Available</span>
+                    <span className="text-right">{formatBytes(stats?.system?.memory?.available || 0)}</span>
+                  </div>
+                </div>
+              )
+            
+            case 'uptime':
+              return (
+                <div 
+                  key={databoxType}
+                  className="border p-2"
+                  style={databoxStyle}
+                >
+                  <div className="font-bold text-black mb-1">Uptime</div>
+                  <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
+                    <span>System</span>
+                    <span className="text-right">{formatTime(stats?.system?.uptime || 0)}</span>
+                    <span>Moonraker</span>
+                    <span className="text-right">{formatTime(stats?.moonraker?.time || 0)}</span>
+                    <span>WebSockets</span>
+                    <span className="text-right">{stats?.websocketConnections || 0}</span>
+                  </div>
+                </div>
+              )
+            
+            case 'lifetime':
+              return (
+                <div 
+                  key={databoxType}
+                  className="border p-2"
+                  style={databoxStyle}
+                >
+                  <div className="font-bold text-black mb-1 flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    <span>Lifetime</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
+                    <span>Print Time</span>
+                    <span className="text-right">{lifetimeStats ? formatTime(lifetimeStats.totalPrintTime) : 'N/A'}</span>
+                    <span>Total Jobs</span>
+                    <span className="text-right">{lifetimeStats?.totalJobs || 0}</span>
+                    <span>Filament</span>
+                    <span className="text-right">{lifetimeStats ? formatFilament(lifetimeStats.totalFilamentUsed) : 'N/A'}</span>
+                  </div>
+                </div>
+              )
+            
+            default:
+              return null
+          }
+        })}
         
-        {/* Totals (like Handles, Threads, Processes) */}
-        <div 
-          className="border p-2"
-          style={{ 
-            borderColor: '#919B9C',
-            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
-          }}
-        >
-          <div className="font-bold text-black mb-1">Totals</div>
-          <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
-            <span>Layers</span>
-            <span className="text-right">{currentLayer}</span>
-            <span>Total</span>
-            <span className="text-right">{totalLayers || '?'}</span>
-            <span>Progress</span>
-            <span className="text-right">{printProgress.toFixed(0)}%</span>
-          </div>
-        </div>
-
-        {/* Physical Memory equivalent - Temperatures */}
-        <div 
-          className="border p-2"
-          style={{ 
-            borderColor: '#919B9C',
-            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
-          }}
-        >
-          <div className="font-bold text-black mb-1">Temperatures (°C)</div>
-          <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
-            <span>Hotend</span>
-            <span className="text-right">{extruderActual.toFixed(0)}</span>
-            <span>Target</span>
-            <span className="text-right">{extruderTarget.toFixed(0)}</span>
-            <span>Bed</span>
-            <span className="text-right">{bedActual.toFixed(0)}</span>
-          </div>
-        </div>
-
-        {/* Commit Charge equivalent - Print Job */}
-        <div 
-          className="border p-2"
-          style={{ 
-            borderColor: '#919B9C',
-            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
-          }}
-        >
-          <div className="font-bold text-black mb-1">Print Job</div>
-          <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
-            <span>Elapsed</span>
-            <span className="text-right">{formatTime(printTime)}</span>
-            <span>Remaining</span>
-            <span className="text-right">{formatTime(estimatedTimeLeft)}</span>
-            <span>Filament</span>
-            <span className="text-right">{formatFilament(filamentUsed)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Second row of stats */}
-      <div className="grid grid-cols-3 gap-3 mt-3">
-        {/* Kernel Memory equivalent - System */}
-        <div 
-          className="border p-2"
-          style={{ 
-            borderColor: '#919B9C',
-            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
-          }}
-        >
-          <div className="font-bold text-black mb-1">System (K)</div>
-          <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
-            <span>CPU</span>
-            <span className="text-right">{((stats?.system?.cpuUsage?.total || 0)).toFixed(0)}%</span>
-            <span>Memory</span>
-            <span className="text-right">{formatBytes(stats?.system?.memory?.used || 0)}</span>
-            <span>Available</span>
-            <span className="text-right">{formatBytes(stats?.system?.memory?.available || 0)}</span>
-          </div>
-        </div>
-
-        {/* Speed info */}
-        <div 
-          className="border p-2"
-          style={{ 
-            borderColor: '#919B9C',
-            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
-          }}
-        >
-          <div className="font-bold text-black mb-1">Kinematics</div>
-          <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
-            <span>Speed</span>
-            <span className="text-right">{currentSpeed.toFixed(0)} mm/s</span>
-            <span>State</span>
-            <span className="text-right">{printState}</span>
-            <span>WebSockets</span>
-            <span className="text-right">{stats?.websocketConnections || 0}</span>
-          </div>
-        </div>
-
-        {/* Uptime */}
-        <div 
-          className="border p-2"
-          style={{ 
-            borderColor: '#919B9C',
-            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
-          }}
-        >
-          <div className="font-bold text-black mb-1">Uptime</div>
-          <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
-            <span>System</span>
-            <span className="text-right">{formatTime(stats?.system?.uptime || 0)}</span>
-            <span>Moonraker</span>
-            <span className="text-right">{formatTime(stats?.moonraker?.time || 0)}</span>
-            <span>CPU Temp</span>
-            <span className="text-right">{stats?.system?.cpuTemp?.toFixed(0) || 'N/A'}°C</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Third row - Model Thumbnail and Lifetime Stats */}
-      <div className="grid grid-cols-3 gap-3 mt-3">
-        {/* Model Thumbnail */}
-        <div 
-          className="border p-0 overflow-hidden"
-          style={{ 
-            borderColor: '#919B9C',
-            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
-          }}
-        >
-          <div className="font-bold text-black px-2 py-1 flex items-center gap-1">
-            <Image className="w-3 h-3" />
-            <span>Model Preview</span>
-          </div>
-          <div 
-            className="relative flex items-center justify-center"
-            style={{ 
-              backgroundColor: '#000000',
-              minHeight: '80px',
-              aspectRatio: '1/1',
-              maxHeight: '120px'
-            }}
-          >
-            {modelThumbnail ? (
-              <img
-                src={modelThumbnail}
-                alt="Model preview"
-                className="w-full h-full object-contain"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none'
-                }}
-              />
-            ) : (
-              <div className="text-gray-500 text-[10px] text-center p-2">
-                {filename !== 'No active print' ? 'No preview' : 'No print active'}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Empty slot for balance or future use */}
-        <div 
-          className="border p-2"
-          style={{ 
-            borderColor: '#919B9C',
-            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
-          }}
-        >
-          <div className="font-bold text-black mb-1">File Info</div>
-          <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
-            <span>Name</span>
-            <span className="text-right truncate" title={filename}>{filename.length > 10 ? filename.substring(0, 10) + '...' : filename}</span>
-            <span>State</span>
-            <span className="text-right">{printState}</span>
-            <span>Speed</span>
-            <span className="text-right">{currentSpeed.toFixed(0)} mm/s</span>
-          </div>
-        </div>
-
-        {/* Lifetime Statistics */}
-        <div 
-          className="border p-2"
-          style={{ 
-            borderColor: '#919B9C',
-            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
-          }}
-        >
-          <div className="font-bold text-black mb-1 flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            <span>Lifetime</span>
-          </div>
-          <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
-            <span>Print Time</span>
-            <span className="text-right">{lifetimeStats ? formatTime(lifetimeStats.totalPrintTime) : 'N/A'}</span>
-            <span>Total Jobs</span>
-            <span className="text-right">{lifetimeStats?.totalJobs || 0}</span>
-            <span>Filament</span>
-            <span className="text-right">{lifetimeStats ? formatFilament(lifetimeStats.totalFilamentUsed) : 'N/A'}</span>
-          </div>
-        </div>
+        {/* Snapshot cameras as databoxes (when placement is 'databoxes') - always at the end */}
+        {snapshotSettings.placement === 'databoxes' && renderSnapshotSection(true)}
       </div>
     </div>
   )
@@ -1578,13 +1659,14 @@ export default function TaskManagerClient({
                       <div>
                         <label className="block text-black text-[10px] mb-0.5">Size</label>
                         <select
-                          value={camera.size || 'small'}
+                          value={camera.size || 'responsive'}
                           onChange={(e) => updateChromaCamera(camera.id, { size: e.target.value as VideoSize })}
                           className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
                         >
-                          <option value="small">Small (1x)</option>
-                          <option value="medium">Medium (2x)</option>
-                          <option value="large">Large (3x)</option>
+                          <option value="responsive">Responsive</option>
+                          <option value="small">Small (1 space)</option>
+                          <option value="medium">Medium (2 spaces)</option>
+                          <option value="large">Large (3 spaces)</option>
                         </select>
                       </div>
                     </div>
@@ -1717,7 +1799,7 @@ export default function TaskManagerClient({
               
               {/* Size and Placement options */}
               <div className="grid grid-cols-2 gap-2 mb-3">
-                {/* Size */}
+                {/* Size - options depend on placement */}
                 <div>
                   <label className="block text-black text-[10px] font-bold mb-0.5">Size</label>
                   <select
@@ -1725,9 +1807,21 @@ export default function TaskManagerClient({
                     onChange={(e) => saveSnapshotSettings({ size: e.target.value as VideoSize })}
                     className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
                   >
-                    <option value="small">Small (1x)</option>
-                    <option value="medium">Medium (2x)</option>
-                    <option value="large">Large (3x)</option>
+                    <option value="responsive">Responsive</option>
+                    {snapshotSettings.placement === 'databoxes' ? (
+                      // In Databoxes: Small (1 databox width) or Large (full row)
+                      <>
+                        <option value="small">Small (1 box)</option>
+                        <option value="large">Large (full row)</option>
+                      </>
+                    ) : (
+                      // Above/Below Charts: Small (1 space), Medium (2 spaces), Large (3 spaces)
+                      <>
+                        <option value="small">Small (1 space)</option>
+                        <option value="medium">Medium (2 spaces)</option>
+                        <option value="large">Large (3 spaces)</option>
+                      </>
+                    )}
                   </select>
                 </div>
                 
@@ -1736,7 +1830,14 @@ export default function TaskManagerClient({
                   <label className="block text-black text-[10px] font-bold mb-0.5">Placement</label>
                   <select
                     value={snapshotSettings.placement}
-                    onChange={(e) => saveSnapshotSettings({ placement: e.target.value as SnapshotPlacement })}
+                    onChange={(e) => {
+                      const newPlacement = e.target.value as SnapshotPlacement
+                      // Reset size to responsive when changing placement to ensure valid option
+                      saveSnapshotSettings({ 
+                        placement: newPlacement,
+                        size: 'responsive'
+                      })
+                    }}
                     className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
                   >
                     <option value="above">Above Charts</option>
@@ -1755,6 +1856,102 @@ export default function TaskManagerClient({
                     borderRadius: '3px',
                   }}
                   onClick={() => setShowSnapshotDialog(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reorder Databoxes Dialog */}
+      {showReorderDialog && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
+        >
+          <div 
+            className="w-80 shadow-lg"
+            style={{
+              backgroundColor: XP_COLORS.windowBg,
+              border: '2px outset #FFFFFF',
+              borderRadius: '8px',
+            }}
+          >
+            {/* Dialog title bar */}
+            <div 
+              className="flex items-center justify-between px-2 py-1"
+              style={{
+                background: 'linear-gradient(180deg, #0A6AF3 0%, #0054E3 50%, #003EB8 100%)',
+                borderTopLeftRadius: '6px',
+                borderTopRightRadius: '6px',
+              }}
+            >
+              <span className="text-white text-xs font-bold">Reorder Databoxes</span>
+              <button 
+                className="w-4 h-4 rounded-sm flex items-center justify-center text-white"
+                style={{
+                  background: 'linear-gradient(180deg, #E87A6E 0%, #D85C4B 50%, #C44333 100%)',
+                  border: '1px solid rgba(255,255,255,0.5)',
+                }}
+                onClick={() => setShowReorderDialog(false)}
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            </div>
+            {/* Dialog content */}
+            <div className="p-3">
+              <p className="text-[11px] text-black mb-3">
+                Drag and drop to reorder databoxes. Changes are saved automatically.
+              </p>
+              
+              {/* Draggable list */}
+              <div className="space-y-1 mb-3">
+                {databoxOrder.map((databoxType, index) => (
+                  <div
+                    key={databoxType}
+                    draggable
+                    onDragStart={() => handleDragStart(databoxType)}
+                    onDragOver={handleDragOver}
+                    onDrop={() => handleDrop(databoxType)}
+                    className={`
+                      flex items-center gap-2 px-2 py-1.5 border cursor-move
+                      ${draggedDatabox === databoxType ? 'bg-[#316AC5] text-white' : 'bg-white text-black hover:bg-[#E5F3FF]'}
+                    `}
+                    style={{ 
+                      borderColor: '#808080',
+                      borderRadius: '2px',
+                    }}
+                  >
+                    <span className="text-[10px] text-gray-500 w-4">{index + 1}.</span>
+                    <span className="text-[11px] flex-1">{getDataboxDisplayName(databoxType)}</span>
+                    <GripVertical className="w-3 h-3 text-gray-400" />
+                  </div>
+                ))}
+              </div>
+              
+              {/* Buttons */}
+              <div className="flex justify-between">
+                <button
+                  className="px-3 py-0.5 text-[10px] text-black"
+                  style={{
+                    backgroundColor: XP_COLORS.windowBg,
+                    border: '2px outset #FFFFFF',
+                    borderRadius: '3px',
+                  }}
+                  onClick={resetDataboxOrder}
+                >
+                  Reset to Default
+                </button>
+                <button
+                  className="px-3 py-0.5 text-[10px] text-black"
+                  style={{
+                    backgroundColor: XP_COLORS.windowBg,
+                    border: '2px outset #FFFFFF',
+                    borderRadius: '3px',
+                  }}
+                  onClick={() => setShowReorderDialog(false)}
                 >
                   Close
                 </button>
@@ -1890,6 +2087,18 @@ export default function TaskManagerClient({
                   }}
                 >
                   Snapshots...
+                </div>
+                {/* Separator */}
+                <div className="border-t border-[#808080] my-1" />
+                {/* Reorder Databoxes option */}
+                <div 
+                  className="px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                  onClick={() => {
+                    setShowReorderDialog(true)
+                    setShowOptionsMenu(false)
+                  }}
+                >
+                  Reorder Databoxes...
                 </div>
               </div>
             )}
