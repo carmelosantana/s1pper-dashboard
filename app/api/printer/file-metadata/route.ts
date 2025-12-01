@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { GcodeMetadata, ThumbnailInfo } from '@/lib/types'
 
 const KLIPPER_HOST = process.env.PRINTER_HOST
 const KLIPPER_PORT = process.env.MOONRAKER_PORT || '7127'
@@ -8,27 +9,6 @@ if (!KLIPPER_HOST) {
 }
 
 const KLIPPER_BASE_URL = KLIPPER_HOST ? `http://${KLIPPER_HOST}:${KLIPPER_PORT}` : null
-
-interface ThumbnailInfo {
-  width: number
-  height: number
-  size: number
-  relative_path: string
-}
-
-interface FileMetadata {
-  filename: string
-  size?: number
-  modified?: number
-  slicer?: string
-  slicer_version?: string
-  layer_height?: number
-  first_layer_height?: number
-  object_height?: number
-  filament_total?: number
-  estimated_time?: number
-  thumbnails?: ThumbnailInfo[]
-}
 
 export async function GET(request: NextRequest) {
   if (!KLIPPER_BASE_URL) {
@@ -57,20 +37,33 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json()
+    const result = data.result || {}
     
-    // Return the metadata result
-    const metadata: FileMetadata = {
-      filename: data.result?.filename || filename,
-      size: data.result?.size,
-      modified: data.result?.modified,
-      slicer: data.result?.slicer,
-      slicer_version: data.result?.slicer_version,
-      layer_height: data.result?.layer_height,
-      first_layer_height: data.result?.first_layer_height,
-      object_height: data.result?.object_height,
-      filament_total: data.result?.filament_total,
-      estimated_time: data.result?.estimated_time,
-      thumbnails: data.result?.thumbnails || []
+    // Return the full metadata result with all available fields
+    const metadata: GcodeMetadata = {
+      filename: result.filename || filename,
+      size: result.size || 0,
+      modified: result.modified || 0,
+      uuid: result.uuid,
+      slicer: result.slicer,
+      slicer_version: result.slicer_version,
+      gcode_start_byte: result.gcode_start_byte,
+      gcode_end_byte: result.gcode_end_byte,
+      object_height: result.object_height,
+      estimated_time: result.estimated_time,
+      nozzle_diameter: result.nozzle_diameter,
+      layer_height: result.layer_height,
+      first_layer_height: result.first_layer_height,
+      first_layer_extr_temp: result.first_layer_extr_temp,
+      first_layer_bed_temp: result.first_layer_bed_temp,
+      chamber_temp: result.chamber_temp,
+      filament_name: result.filament_name,
+      filament_type: result.filament_type,
+      filament_total: result.filament_total,
+      filament_weight_total: result.filament_weight_total,
+      thumbnails: (result.thumbnails || []) as ThumbnailInfo[],
+      print_start_time: result.print_start_time,
+      job_id: result.job_id
     }
 
     return NextResponse.json(metadata)

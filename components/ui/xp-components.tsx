@@ -295,28 +295,32 @@ interface XPTabButtonProps {
   active: boolean
   onClick: () => void
   children: React.ReactNode
+  disabled?: boolean
 }
 
 // XP-style Tab Button - smaller text - memoized for performance
 export const XPTabButton = memo(function XPTabButton({ 
   active, 
   onClick, 
-  children 
+  children,
+  disabled = false 
 }: XPTabButtonProps) {
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       className={`
-        px-3 py-0.5 text-xs font-['Tahoma'] border-t border-l border-r text-black
-        ${active 
-          ? 'bg-white border-[#919B9C] -mb-px z-10 relative' 
-          : 'bg-[#ECE9D8] border-[#919B9C] hover:bg-[#F5F4EF]'
+        px-3 py-0.5 text-xs font-['Tahoma'] border-t border-l border-r
+        ${disabled 
+          ? 'bg-[#D4D0C8] border-[#919B9C] text-gray-400 cursor-not-allowed'
+          : active 
+            ? 'bg-white border-[#919B9C] -mb-px z-10 relative text-black' 
+            : 'bg-[#ECE9D8] border-[#919B9C] hover:bg-[#F5F4EF] text-black'
         }
       `}
       style={{
         borderTopLeftRadius: '3px',
         borderTopRightRadius: '3px',
-        color: '#000000',
       }}
     >
       {children}
@@ -443,7 +447,7 @@ export const XPButton = memo(function XPButton({
   
   return (
     <button
-      className={`px-3 py-0.5 text-[10px] ${className}`}
+      className={`px-3 py-0.5 text-[10px] inline-flex items-center gap-1 ${className}`}
       style={{
         ...baseStyles,
         borderRadius: '3px',

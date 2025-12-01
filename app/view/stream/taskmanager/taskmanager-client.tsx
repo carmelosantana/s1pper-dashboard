@@ -1,16 +1,17 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
-import { Minus, Maximize2, X, ChevronDown, Camera, Plus, Trash2, GripVertical } from 'lucide-react'
+import { Minus, Maximize2, X, ChevronDown, Camera, Plus, Trash2, GripVertical, Download } from 'lucide-react'
 import { usePrinterData } from '@/lib/hooks/use-printer-data'
 import { usePrintStatus } from '@/lib/contexts/websocket-context'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage'
 import { useInterval } from '@/lib/hooks/use-interval'
 import { XPTabButton, XP_COLORS, XPDialog, XPButton } from '@/components/ui/xp-components'
 import { KlipperTab } from '@/components/taskmanager/klipper-tab'
+import { ModelTab } from '@/components/taskmanager/model-tab'
 import { ApplicationsTab, ProcessesTab, NetworkingTab, UsersTab } from '@/components/taskmanager/tabs'
 import { getDataboxDisplayName } from '@/lib/utils/taskmanager-utils'
-import type { PrinterStatus, WebcamConfig, LifetimeStats } from '@/lib/types'
+import type { PrinterStatus, WebcamConfig, LifetimeStats, GcodeMetadata } from '@/lib/types'
 import type { SystemStats, SystemInfo } from '@/app/api/printer/system-stats/route'
 
 // Local storage keys
@@ -24,7 +25,7 @@ const MODEL_PREVIEW_DARK_BG_KEY = 'taskmanager_model_preview_dark_bg'
 type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'console' | 'system' | 'uptime' | 'lifetime'
 type VideoSize = 'responsive' | 'small' | 'medium' | 'large'
 type SnapshotPlacement = 'above' | 'below' | 'databoxes'
-type TabType = 'klipper' | 'applications' | 'processes' | 'networking' | 'users'
+type TabType = 'klipper' | 'model' | 'applications' | 'processes' | 'networking' | 'users'
 
 const DEFAULT_DATABOX_ORDER: DataboxType[] = ['model-preview', 'print-job', 'temperatures', 'system', 'uptime', 'lifetime']
 
@@ -224,6 +225,9 @@ export default function TaskManagerClient({
   const [editingChromaCameras, setEditingChromaCameras] = useState<ChromaCamera[]>([])
   const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats | null>(null)
   const [modelThumbnail, setModelThumbnail] = useState<string | null>(null)
+  const [modelMetadata, setModelMetadata] = useState<GcodeMetadata | null>(null)
+  const [isLoadingMetadata, setIsLoadingMetadata] = useState(false)
+  const [showFileMenu, setShowFileMenu] = useState(false)
   const [draggedDatabox, setDraggedDatabox] = useState<DataboxType | null>(null)
   
   // Check if we're in development mode
@@ -357,21 +361,25 @@ export default function TaskManagerClient({
     fetchWebcams()
   }, [])
 
-  // Fetch model thumbnail when print is active
+  // Fetch model thumbnail and metadata when print is active
   useEffect(() => {
-    const fetchModelThumbnail = async () => {
+    const fetchModelData = async () => {
       const currentFilename = printerStatus?.print?.filename || initialStatus?.print?.filename
       if (!currentFilename) {
         setModelThumbnail(null)
+        setModelMetadata(null)
         return
       }
       
+      setIsLoadingMetadata(true)
       try {
         const response = await fetch(`/api/printer/file-metadata?filename=${encodeURIComponent(currentFilename)}`)
         if (response.ok) {
-          const data = await response.json()
+          const data: GcodeMetadata = await response.json()
+          setModelMetadata(data)
+          
           if (data.thumbnails && data.thumbnails.length > 0) {
-            const sortedThumbnails = [...data.thumbnails].sort((a: { width: number }, b: { width: number }) => b.width - a.width)
+            const sortedThumbnails = [...data.thumbnails].sort((a, b) => b.width - a.width)
             const thumbnail = sortedThumbnails[0]
             if (thumbnail.relative_path) {
               setModelThumbnail(`/api/printer/thumbnail?path=${encodeURIComponent(thumbnail.relative_path)}`)
@@ -381,13 +389,37 @@ export default function TaskManagerClient({
           }
         }
       } catch (error) {
-        console.error('Failed to fetch model thumbnail:', error)
+        console.error('Failed to fetch model data:', error)
         setModelThumbnail(null)
+        setModelMetadata(null)
+      } finally {
+        setIsLoadingMetadata(false)
       }
     }
     
-    fetchModelThumbnail()
+    fetchModelData()
   }, [printerStatus?.print?.filename, initialStatus?.print?.filename])
+
+  // Check if there's an active print job (for enabling/disabling Model tab and Download)
+  const hasActivePrint = useMemo(() => {
+    const state = liveStatus?.print?.state
+    return state === 'printing' || state === 'paused' || state === 'complete'
+  }, [liveStatus?.print?.state])
+
+  // Handle GCODE download from File menu
+  const handleDownloadGcode = useCallback(() => {
+    const filename = liveStatus?.print?.filename
+    if (!filename) return
+    
+    const downloadUrl = `/api/printer/file-download?filename=${encodeURIComponent(filename)}`
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = filename.split('/').pop() || filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    setShowFileMenu(false)
+  }, [liveStatus?.print?.filename])
 
   // Handlers with useCallback for stability
   const handleCameraSelectionChange = useCallback((cameraUid: string, checked: boolean) => {
@@ -486,6 +518,7 @@ export default function TaskManagerClient({
 
   // Close menus when clicking outside
   const handleCloseMenus = useCallback(() => {
+    setShowFileMenu(false)
     setShowViewMenu(false)
     setShowOptionsMenu(false)
   }, [])
@@ -750,12 +783,34 @@ export default function TaskManagerClient({
           className="flex items-center px-2 py-0.5 text-xs border-b relative"
           style={{ backgroundColor: XP_COLORS.windowBg, borderColor: '#ACA899' }}
         >
-          <span className="px-2 py-0.5 hover:bg-[#316AC5] hover:text-white cursor-default text-black">File</span>
+          <div className="relative">
+            <span 
+              className={`px-2 py-0.5 cursor-default text-black flex items-center gap-0.5 ${showFileMenu ? 'bg-[#316AC5] text-white' : 'hover:bg-[#316AC5] hover:text-white'}`}
+              onClick={() => { setShowOptionsMenu(false); setShowViewMenu(false); setShowFileMenu(!showFileMenu) }}
+            >
+              File <ChevronDown className="w-3 h-3" />
+            </span>
+            {showFileMenu && (
+              <div 
+                className="absolute top-full left-0 z-50 py-1 min-w-[200px] shadow-md"
+                style={{ backgroundColor: '#FFFFFF', border: '1px solid #808080' }}
+                onMouseLeave={handleCloseMenus}
+              >
+                <div 
+                  className={`px-4 py-1 flex items-center gap-2 ${hasActivePrint ? 'text-black hover:bg-[#316AC5] hover:text-white cursor-pointer' : 'text-gray-400 cursor-default'}`}
+                  onClick={hasActivePrint ? handleDownloadGcode : undefined}
+                >
+                  <Download className="w-3 h-3" />
+                  Download GCODE
+                </div>
+              </div>
+            )}
+          </div>
           
           <div className="relative">
             <span 
               className={`px-2 py-0.5 cursor-default text-black flex items-center gap-0.5 ${showOptionsMenu ? 'bg-[#316AC5] text-white' : 'hover:bg-[#316AC5] hover:text-white'}`}
-              onClick={() => { setShowViewMenu(false); setShowOptionsMenu(!showOptionsMenu) }}
+              onClick={() => { setShowFileMenu(false); setShowViewMenu(false); setShowOptionsMenu(!showOptionsMenu) }}
             >
               Options <ChevronDown className="w-3 h-3" />
             </span>
@@ -785,7 +840,7 @@ export default function TaskManagerClient({
           <div className="relative">
             <span 
               className={`px-2 py-0.5 cursor-default text-black flex items-center gap-0.5 ${showViewMenu ? 'bg-[#316AC5] text-white' : 'hover:bg-[#316AC5] hover:text-white'}`}
-              onClick={() => { setShowOptionsMenu(false); setShowViewMenu(!showViewMenu) }}
+              onClick={() => { setShowFileMenu(false); setShowOptionsMenu(false); setShowViewMenu(!showViewMenu) }}
             >
               View <ChevronDown className="w-3 h-3" />
             </span>
@@ -824,6 +879,13 @@ export default function TaskManagerClient({
           <div className="flex px-2 pt-1" style={{ backgroundColor: XP_COLORS.windowBg }}>
             <XPTabButton active={activeTab === 'klipper'} onClick={() => setActiveTab('klipper')}>
               Klipper
+            </XPTabButton>
+            <XPTabButton 
+              active={activeTab === 'model'} 
+              onClick={() => hasActivePrint && setActiveTab('model')}
+              disabled={!hasActivePrint}
+            >
+              Model
             </XPTabButton>
             <XPTabButton active={activeTab === 'applications'} onClick={() => setActiveTab('applications')}>
               Applications
@@ -873,6 +935,14 @@ export default function TaskManagerClient({
                   klippyState={liveStatus?.system?.klippyState}
                   filePosition={liveStatus?.file?.position}
                   fileSize={liveStatus?.file?.size}
+                />
+              )}
+              {activeTab === 'model' && (
+                <ModelTab
+                  metadata={modelMetadata}
+                  modelThumbnail={modelThumbnail}
+                  filename={liveStatus?.print?.filename || null}
+                  isLoading={isLoadingMetadata}
                 />
               )}
               {activeTab === 'applications' && (

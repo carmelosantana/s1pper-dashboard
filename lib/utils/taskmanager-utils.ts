@@ -171,3 +171,66 @@ export function getDataboxDisplayName(type: string): string {
   }
   return names[type] || type
 }
+
+/**
+ * Format filament weight in grams
+ */
+export function formatFilamentWeight(grams: number | undefined): string {
+  if (!grams || grams === 0) return 'N/A'
+  if (grams >= 1000) {
+    return `${(grams / 1000).toFixed(2)} kg`
+  }
+  return `${grams.toFixed(1)} g`
+}
+
+/**
+ * Format model height/dimension in mm
+ */
+export function formatDimension(mm: number | undefined): string {
+  if (mm === undefined || mm === null) return 'N/A'
+  return `${mm.toFixed(2)} mm`
+}
+
+/**
+ * Format layer height in mm with more precision
+ */
+export function formatLayerHeight(mm: number | undefined): string {
+  if (mm === undefined || mm === null) return 'N/A'
+  return `${mm.toFixed(2)} mm`
+}
+
+/**
+ * Format nozzle diameter in mm
+ */
+export function formatNozzleDiameter(mm: number | undefined): string {
+  if (mm === undefined || mm === null) return 'N/A'
+  return `${mm.toFixed(1)} mm`
+}
+
+/**
+ * Format temperature for display
+ */
+export function formatTemperature(temp: number | undefined): string {
+  if (temp === undefined || temp === null) return 'N/A'
+  return `${temp}°C`
+}
+
+/**
+ * Format file size in human readable format
+ */
+export function formatFileSize(bytes: number | undefined): string {
+  if (!bytes || bytes === 0) return 'N/A'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+/**
+ * Format slicer info (name and version)
+ */
+export function formatSlicerInfo(slicer?: string, version?: string): string {
+  if (!slicer) return 'Unknown Slicer'
+  if (!version) return slicer
+  return `${slicer} ${version}`
+}
