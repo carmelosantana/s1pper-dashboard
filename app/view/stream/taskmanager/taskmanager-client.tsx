@@ -14,10 +14,11 @@ const SNAPSHOT_SETTINGS_KEY = 'taskmanager_snapshot_settings'
 const DATABOX_ORDER_KEY = 'taskmanager_databox_order'
 const MODEL_PREVIEW_DARK_BG_KEY = 'taskmanager_model_preview_dark_bg'
 
-// Default databox order: Model Preview, Print Job, Temperatures, Console, System, Uptime, Lifetime
+// Default databox order: Model Preview, Print Job, Temperatures, System, Uptime, Lifetime
+// Console is disabled by default but can be enabled via Reorder Databoxes
 // Snapshot is always added at the end if enabled
 type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'console' | 'system' | 'uptime' | 'lifetime'
-const DEFAULT_DATABOX_ORDER: DataboxType[] = ['model-preview', 'print-job', 'temperatures', 'console', 'system', 'uptime', 'lifetime']
+const DEFAULT_DATABOX_ORDER: DataboxType[] = ['model-preview', 'print-job', 'temperatures', 'system', 'uptime', 'lifetime']
 
 // Size options for video feeds
 // For Above/Below Charts: responsive, small (1 space), medium (2 spaces), large (3 spaces)
@@ -127,14 +128,14 @@ function getPowerColor(powerPercent: number): string {
   return '#00FF00' // Green - low power
 }
 
-// Calculate temperature change over a period (default: last 30 seconds)
-// Returns { value: number, formatted: string, color: string }
-function getTemperatureChange(
+// Calculate temperature rate of change (°C/s) over a period
+// This shows how fast the temperature is changing per second
+function getTemperatureRateOfChange(
   history: number[],
   secondsAgo: number = 30
 ): { value: number; formatted: string; color: string } {
-  if (history.length === 0) {
-    return { value: 0, formatted: '0', color: '#808080' }
+  if (history.length < 2) {
+    return { value: 0, formatted: '+0.0', color: '#808080' }
   }
   
   const currentTemp = history[history.length - 1]
@@ -142,27 +143,34 @@ function getTemperatureChange(
   const historicalIndex = Math.max(0, history.length - 1 - secondsAgo)
   const historicalTemp = history[historicalIndex]
   
-  const change = currentTemp - historicalTemp
+  // Calculate actual time span (in case we don't have full history yet)
+  const actualSeconds = history.length - 1 - historicalIndex
+  if (actualSeconds === 0) {
+    return { value: 0, formatted: '+0.0', color: '#808080' }
+  }
+  
+  // Rate of change per second
+  const ratePerSecond = (currentTemp - historicalTemp) / actualSeconds
   
   // Format with sign and color
   let formatted: string
   let color: string
   
-  if (Math.abs(change) < 0.5) {
+  if (Math.abs(ratePerSecond) < 0.05) {
     // No significant change
-    formatted = '±0'
+    formatted = '+0.0'
     color = '#808080' // Gray
-  } else if (change > 0) {
+  } else if (ratePerSecond > 0) {
     // Heating up
-    formatted = `+${change.toFixed(1)}`
+    formatted = `+${ratePerSecond.toFixed(1)}`
     color = '#FF4444' // Red for heating
   } else {
     // Cooling down
-    formatted = `${change.toFixed(1)}`
+    formatted = `${ratePerSecond.toFixed(1)}`
     color = '#4488FF' // Blue for cooling
   }
   
-  return { value: change, formatted, color }
+  return { value: ratePerSecond, formatted, color }
 }
 
 // XP-style Graph Component with optional second line - memoized for performance
@@ -1379,9 +1387,9 @@ export default function TaskManagerClient({
               )
             
             case 'temperatures':
-              // Calculate temperature changes over the last 30 seconds
-              const hotendChange = getTemperatureChange(extruderHistory, 30)
-              const bedChange = getTemperatureChange(bedHistory, 30)
+              // Calculate temperature rate of change (°C/s) over the last 10 seconds
+              const hotendRate = getTemperatureRateOfChange(extruderHistory, 10)
+              const bedRate = getTemperatureRateOfChange(bedHistory, 10)
               
               return (
                 <div 
@@ -1393,23 +1401,23 @@ export default function TaskManagerClient({
                   <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
                     <span>Hotend</span>
                     <span className="text-right">{extruderActual.toFixed(0)} / {extruderTarget.toFixed(0)}</span>
-                    <span className="text-[9px] text-gray-600">Change (30s)</span>
+                    <span className="text-[9px] text-gray-600">Rate</span>
                     <span 
                       className="text-right font-bold text-[9px]"
-                      style={{ color: hotendChange.color }}
-                      title="Temperature change over last 30 seconds"
+                      style={{ color: hotendRate.color }}
+                      title="Temperature rate of change (°C/s)"
                     >
-                      {hotendChange.formatted}°C
+                      {hotendRate.formatted}°C/s
                     </span>
                     <span>Bed</span>
                     <span className="text-right">{bedActual.toFixed(0)} / {bedTarget.toFixed(0)}</span>
-                    <span className="text-[9px] text-gray-600">Change (30s)</span>
+                    <span className="text-[9px] text-gray-600">Rate</span>
                     <span 
                       className="text-right font-bold text-[9px]"
-                      style={{ color: bedChange.color }}
-                      title="Temperature change over last 30 seconds"
+                      style={{ color: bedRate.color }}
+                      title="Temperature rate of change (°C/s)"
                     >
-                      {bedChange.formatted}°C
+                      {bedRate.formatted}°C/s
                     </span>
                     <span>CPU</span>
                     <span className="text-right">{stats?.system?.cpuTemp?.toFixed(0) || 'N/A'}°C</span>
@@ -2431,6 +2439,29 @@ export default function TaskManagerClient({
               style={{ backgroundColor: isConnected ? '#00AA00' : '#FF0000' }}
             />
             {connectionStatus}
+          </div>
+          {/* State and File Progress */}
+          <div 
+            className="px-2 flex items-center gap-2 text-black text-[10px]"
+            style={{
+              borderRight: '1px solid #808080',
+              borderTop: '1px solid #808080',
+              borderLeft: '1px solid #FFFFFF',
+              borderBottom: '1px solid #FFFFFF',
+              margin: '2px',
+              padding: '0 8px',
+              minWidth: '180px',
+            }}
+          >
+            <span className="truncate">
+              {liveStatus?.system?.klippyState || 'unknown'}
+            </span>
+            <span className="text-gray-500">|</span>
+            <span>
+              File: {liveStatus?.file?.size && liveStatus.file.size > 0 
+                ? ((liveStatus.file.position / liveStatus.file.size) * 100).toFixed(1) 
+                : '0.0'}%
+            </span>
           </div>
         </div>
       </div>
