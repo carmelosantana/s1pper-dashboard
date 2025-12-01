@@ -1,14 +1,27 @@
 "use client"
 
 import { useState, useEffect, useRef, useMemo, useCallback, memo } from 'react'
-import { Minus, Maximize2, X, ChevronDown, Camera, Plus, Trash2 } from 'lucide-react'
+import { Minus, Maximize2, X, ChevronDown, Camera, Plus, Trash2, Video, Image, Clock } from 'lucide-react'
 import { usePrinterData } from '@/lib/hooks/use-printer-data'
-import type { PrinterStatus, WebcamConfig } from '@/lib/types'
+import type { PrinterStatus, WebcamConfig, LifetimeStats } from '@/lib/types'
 import type { SystemStats, SystemInfo } from '@/app/api/printer/system-stats/route'
 
 // Local storage keys
 const SNAPSHOT_CAMERAS_KEY = 'taskmanager_snapshot_cameras'
 const CHROMA_CAMERAS_KEY = 'taskmanager_chroma_cameras'
+const SNAPSHOT_SETTINGS_KEY = 'taskmanager_snapshot_settings'
+
+// Size options for video feeds
+type VideoSize = 'small' | 'medium' | 'large'
+
+// Snapshot placement options
+type SnapshotPlacement = 'above' | 'below' | 'databoxes'
+
+// Snapshot settings interface
+interface SnapshotSettings {
+  size: VideoSize
+  placement: SnapshotPlacement
+}
 
 // Chroma camera configuration type
 interface ChromaCamera {
@@ -18,6 +31,7 @@ interface ChromaCamera {
   framerate: 15 | 30 | 60
   chromaColor: 'green' | 'blue' | 'custom'
   customColor?: string
+  size: VideoSize
 }
 
 // Windows XP Task Manager tabs - reordered with Klipper (Performance) first
@@ -380,6 +394,14 @@ export default function TaskManagerClient({
   
   // Snapshot dialog state
   const [showSnapshotDialog, setShowSnapshotDialog] = useState(false)
+  const [snapshotSettings, setSnapshotSettings] = useState<SnapshotSettings>({
+    size: 'small',
+    placement: 'above'
+  })
+  
+  // Lifetime stats and model thumbnail state
+  const [lifetimeStats, setLifetimeStats] = useState<LifetimeStats | null>(null)
+  const [modelThumbnail, setModelThumbnail] = useState<string | null>(null)
   
   // Check if we're in development mode
   const isDevelopment = process.env.NODE_ENV === 'development'
@@ -478,9 +500,25 @@ export default function TaskManagerClient({
     const savedChromaCameras = localStorage.getItem(CHROMA_CAMERAS_KEY)
     if (savedChromaCameras) {
       try {
-        setChromaCameras(JSON.parse(savedChromaCameras))
+        const parsed = JSON.parse(savedChromaCameras)
+        // Ensure all cameras have a size property (for backwards compatibility)
+        const withSize = parsed.map((cam: ChromaCamera) => ({
+          ...cam,
+          size: cam.size || 'small'
+        }))
+        setChromaCameras(withSize)
       } catch (e) {
         console.error('Failed to parse saved chroma cameras:', e)
+      }
+    }
+    
+    // Load saved snapshot settings from localStorage
+    const savedSnapshotSettings = localStorage.getItem(SNAPSHOT_SETTINGS_KEY)
+    if (savedSnapshotSettings) {
+      try {
+        setSnapshotSettings(JSON.parse(savedSnapshotSettings))
+      } catch (e) {
+        console.error('Failed to parse saved snapshot settings:', e)
       }
     }
     
@@ -517,6 +555,60 @@ export default function TaskManagerClient({
     return () => clearInterval(interval)
   }, [selectedSnapshotCameras])
 
+  // Fetch lifetime stats periodically
+  useEffect(() => {
+    const fetchLifetimeStats = async () => {
+      try {
+        const response = await fetch('/api/printer/lifetime-stats')
+        if (response.ok) {
+          const data = await response.json()
+          setLifetimeStats(data)
+        }
+      } catch (error) {
+        console.error('Failed to fetch lifetime stats:', error)
+      }
+    }
+    
+    fetchLifetimeStats()
+    const interval = setInterval(fetchLifetimeStats, 30000) // Refresh every 30 seconds
+    return () => clearInterval(interval)
+  }, [])
+
+  // Fetch model thumbnail when print is active
+  useEffect(() => {
+    const fetchModelThumbnail = async () => {
+      const currentFilename = printerStatus?.print?.filename || initialStatus?.print?.filename
+      if (!currentFilename) {
+        setModelThumbnail(null)
+        return
+      }
+      
+      try {
+        // Fetch file metadata from Moonraker to get thumbnail paths
+        const response = await fetch(`/api/printer/file-metadata?filename=${encodeURIComponent(currentFilename)}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.thumbnails && data.thumbnails.length > 0) {
+            // Get the largest thumbnail available
+            const sortedThumbnails = [...data.thumbnails].sort((a: { width: number }, b: { width: number }) => b.width - a.width)
+            const thumbnail = sortedThumbnails[0]
+            if (thumbnail.relative_path) {
+              // Construct the thumbnail URL
+              setModelThumbnail(`/api/printer/thumbnail?path=${encodeURIComponent(thumbnail.relative_path)}`)
+            }
+          } else {
+            setModelThumbnail(null)
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch model thumbnail:', error)
+        setModelThumbnail(null)
+      }
+    }
+    
+    fetchModelThumbnail()
+  }, [printerStatus?.print?.filename, initialStatus?.print?.filename])
+
   // Handle camera selection change
   const handleCameraSelectionChange = useCallback((cameraUid: string, checked: boolean) => {
     setSelectedSnapshotCameras(prev => {
@@ -543,6 +635,7 @@ export default function TaskManagerClient({
       url: '',
       framerate: 30,
       chromaColor: 'green',
+      size: 'small',
     }
     setEditingChromaCameras(prev => [...prev, newCamera])
   }, [editingChromaCameras.length])
@@ -571,6 +664,25 @@ export default function TaskManagerClient({
       case 'custom': return camera.customColor || '#00FF00'
       default: return '#00FF00'
     }
+  }, [])
+
+  // Get grid column span based on size
+  const getSizeSpan = useCallback((size: VideoSize): string => {
+    switch (size) {
+      case 'small': return ''
+      case 'medium': return 'sm:col-span-2'
+      case 'large': return 'sm:col-span-3'
+      default: return ''
+    }
+  }, [])
+
+  // Save snapshot settings to localStorage
+  const saveSnapshotSettings = useCallback((newSettings: Partial<SnapshotSettings>) => {
+    setSnapshotSettings(prev => {
+      const updated = { ...prev, ...newSettings }
+      localStorage.setItem(SNAPSHOT_SETTINGS_KEY, JSON.stringify(updated))
+      return updated
+    })
   }, [])
 
   const stats = systemStats
@@ -753,19 +865,213 @@ export default function TaskManagerClient({
   )
 
   // Render Klipper Tab (formerly Performance) - matching Windows XP layout
-  const renderKlipperTab = () => (
+  const renderKlipperTab = () => {
+    // Helper function to render snapshot section
+    const renderSnapshotSection = (isDataboxStyle: boolean = false) => {
+      if (selectedSnapshotCameras.length === 0) return null
+      
+      // Get the grid span class based on global snapshot size
+      const getSnapshotSizeSpan = () => {
+        switch (snapshotSettings.size) {
+          case 'small': return ''
+          case 'medium': return 'sm:col-span-2'
+          case 'large': return 'sm:col-span-3'
+          default: return ''
+        }
+      }
+      
+      // Databox style: render as individual databox cards in the stats grid
+      if (isDataboxStyle) {
+        return (
+          <>
+            {selectedSnapshotCameras.map(cameraUid => {
+              const camera = availableWebcams.find(w => w.uid === cameraUid)
+              if (!camera) return null
+              
+              return (
+                <div 
+                  key={cameraUid}
+                  className="border p-0 overflow-hidden"
+                  style={{ 
+                    borderColor: '#919B9C',
+                    boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
+                  }}
+                >
+                  {/* Camera name header - matches databox style */}
+                  <div className="font-bold text-black px-2 py-1 flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <Camera className="w-3 h-3" />
+                      <span className="truncate text-[11px]">{camera.name}</span>
+                    </div>
+                    <span 
+                      className="text-[8px] bg-[#316AC5] text-white px-1 py-0.5 rounded"
+                      style={{ fontSize: '8px' }}
+                    >
+                      5s
+                    </span>
+                  </div>
+                  {/* Snapshot image - full width within card */}
+                  <div 
+                    className="relative w-full"
+                    style={{ 
+                      backgroundColor: '#000000',
+                      aspectRatio: camera.aspect_ratio === '16:9' ? '16/9' : '4/3'
+                    }}
+                  >
+                    <img
+                      src={`/api/camera/snapshot?uid=${cameraUid}&t=${snapshotTimestamp}`}
+                      alt={`${camera.name} snapshot`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none'
+                      }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </>
+        )
+      }
+      
+      // Standard style (above/below)
+      return (
+        <div className="mb-3">
+          <div className="text-black font-bold mb-2 flex items-center gap-2">
+            <Camera className="w-4 h-4" />
+            Camera Snapshots
+          </div>
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+            {selectedSnapshotCameras.map(cameraUid => {
+              const camera = availableWebcams.find(w => w.uid === cameraUid)
+              if (!camera) return null
+              
+              return (
+                <div 
+                  key={cameraUid}
+                  className={getSnapshotSizeSpan()}
+                  style={{ 
+                    border: '1px solid #919B9C',
+                    boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
+                  }}
+                >
+                  {/* Camera name header */}
+                  <div 
+                    className="px-2 py-1 text-black font-bold flex items-center justify-between"
+                    style={{
+                      backgroundColor: '#D4D0C8',
+                      borderBottom: '1px solid #808080',
+                      boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
+                    }}
+                  >
+                    <span className="truncate">{camera.name}</span>
+                    <span 
+                      className="text-[8px] bg-[#316AC5] text-white px-1.5 py-0.5 rounded"
+                      style={{ fontSize: '8px' }}
+                    >
+                      5s
+                    </span>
+                  </div>
+                  {/* Snapshot image */}
+                  <div 
+                    className="relative"
+                    style={{ 
+                      backgroundColor: '#000000',
+                      aspectRatio: camera.aspect_ratio === '16:9' ? '16/9' : '4/3'
+                    }}
+                  >
+                    <img
+                      src={`/api/camera/snapshot?uid=${cameraUid}&t=${snapshotTimestamp}`}
+                      alt={`${camera.name} snapshot`}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = 'none'
+                      }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )
+    }
+    
+    // Helper function to render chart rows
+    const renderChartRows = () => (
+      <>
+        {/* Top row: Small gauge + History graph (like CPU Usage + CPU Usage History) */}
+        <div className="grid grid-cols-4 gap-3 mb-3">
+          {/* Hotend Usage - small vertical gauge */}
+          <div>
+            <div className="text-black font-bold mb-1">Hotend Usage</div>
+            <XPVerticalBar
+              value={extruderPower * 100}
+              maxValue={100}
+              height={80}
+              displayValue={`${(extruderPower * 100).toFixed(0)} %`}
+              color={getPowerColor(extruderPower * 100)}
+            />
+          </div>
+          
+          {/* Hotend Usage History */}
+          <div className="col-span-3">
+            <div className="text-black font-bold mb-1">Hotend Usage History</div>
+            <XPGraph 
+              data={extruderHistory}
+              data2={extruderTargetHistory}
+              maxValue={300}
+              height={80}
+              lineColor={XP_COLORS.graphLine}
+              line2Color={XP_COLORS.graphLineRed}
+            />
+          </div>
+        </div>
+
+        {/* Second row: PF Usage equivalent + Page File History (Bed) */}
+        <div className="grid grid-cols-4 gap-3 mb-3">
+          {/* Bed Usage - small vertical gauge */}
+          <div>
+            <div className="text-black font-bold mb-1">Bed Usage</div>
+            <XPVerticalBar
+              value={bedPower * 100}
+              maxValue={100}
+              height={80}
+              displayValue={`${(bedPower * 100).toFixed(0)} %`}
+              color={getPowerColor(bedPower * 100)}
+            />
+          </div>
+          
+          {/* Bed Usage History */}
+          <div className="col-span-3">
+            <div className="text-black font-bold mb-1">Bed Usage History</div>
+            <XPGraph 
+              data={bedHistory}
+              data2={bedTargetHistory}
+              maxValue={120}
+              height={80}
+              lineColor={XP_COLORS.graphLine}
+              line2Color={XP_COLORS.graphLineRed}
+            />
+          </div>
+        </div>
+      </>
+    )
+    
+    return (
     <div className="p-3 font-['Tahoma'] text-xs">
       {/* Live Video Section - Shows chroma key camera feeds */}
       {chromaCameras.length > 0 && (
         <div className="mb-3">
           <div className="text-black font-bold mb-2 flex items-center gap-2">
-            <Camera className="w-4 h-4" />
+            <Video className="w-4 h-4" />
             Live Video
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {chromaCameras.map(camera => (
               <div 
                 key={camera.id}
+                className={getSizeSpan(camera.size || 'small')}
                 style={{ 
                   border: '1px solid #919B9C',
                   boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
@@ -819,125 +1125,21 @@ export default function TaskManagerClient({
         </div>
       )}
 
-      {/* Camera Snapshots Section - Only show when cameras are selected */}
-      {selectedSnapshotCameras.length > 0 && (
-        <div className="mb-3">
-          <div className="text-black font-bold mb-2 flex items-center gap-2">
-            <Camera className="w-4 h-4" />
-            Camera Snapshots
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {selectedSnapshotCameras.map(cameraUid => {
-              const camera = availableWebcams.find(w => w.uid === cameraUid)
-              if (!camera) return null
-              
-              return (
-                <div 
-                  key={cameraUid}
-                  style={{ 
-                    border: '1px solid #919B9C',
-                    boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
-                  }}
-                >
-                  {/* Camera name header */}
-                  <div 
-                    className="px-2 py-1 text-black font-bold flex items-center justify-between"
-                    style={{
-                      backgroundColor: '#D4D0C8',
-                      borderBottom: '1px solid #808080',
-                      boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF',
-                    }}
-                  >
-                    <span className="truncate">{camera.name}</span>
-                    <span 
-                      className="text-[8px] bg-[#316AC5] text-white px-1.5 py-0.5 rounded"
-                      style={{ fontSize: '8px' }}
-                    >
-                      5s
-                    </span>
-                  </div>
-                  {/* Snapshot image */}
-                  <div 
-                    className="relative"
-                    style={{ 
-                      backgroundColor: '#000000',
-                      aspectRatio: camera.aspect_ratio === '16:9' ? '16/9' : '4/3'
-                    }}
-                  >
-                    <img
-                      src={`/api/camera/snapshot?uid=${cameraUid}&t=${snapshotTimestamp}`}
-                      alt={`${camera.name} snapshot`}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.display = 'none'
-                      }}
-                    />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+      {/* Snapshot placement: above */}
+      {snapshotSettings.placement === 'above' && renderSnapshotSection()}
 
-      {/* Top row: Small gauge + History graph (like CPU Usage + CPU Usage History) */}
-      <div className="grid grid-cols-4 gap-3 mb-3">
-        {/* Hotend Usage - small vertical gauge */}
-        <div>
-          <div className="text-black font-bold mb-1">Hotend Usage</div>
-          <XPVerticalBar
-            value={extruderPower * 100}
-            maxValue={100}
-            height={80}
-            displayValue={`${(extruderPower * 100).toFixed(0)} %`}
-            color={getPowerColor(extruderPower * 100)}
-          />
-        </div>
-        
-        {/* Hotend Usage History */}
-        <div className="col-span-3">
-          <div className="text-black font-bold mb-1">Hotend Usage History</div>
-          <XPGraph 
-            data={extruderHistory}
-            data2={extruderTargetHistory}
-            maxValue={300}
-            height={80}
-            lineColor={XP_COLORS.graphLine}
-            line2Color={XP_COLORS.graphLineRed}
-          />
-        </div>
-      </div>
+      {/* Chart rows */}
+      {renderChartRows()}
 
-      {/* Second row: PF Usage equivalent + Page File History (Bed) */}
-      <div className="grid grid-cols-4 gap-3 mb-3">
-        {/* Bed Usage - small vertical gauge */}
-        <div>
-          <div className="text-black font-bold mb-1">Bed Usage</div>
-          <XPVerticalBar
-            value={bedPower * 100}
-            maxValue={100}
-            height={80}
-            displayValue={`${(bedPower * 100).toFixed(0)} %`}
-            color={getPowerColor(bedPower * 100)}
-          />
-        </div>
-        
-        {/* Bed Usage History */}
-        <div className="col-span-3">
-          <div className="text-black font-bold mb-1">Bed Usage History</div>
-          <XPGraph 
-            data={bedHistory}
-            data2={bedTargetHistory}
-            maxValue={120}
-            height={80}
-            lineColor={XP_COLORS.graphLine}
-            line2Color={XP_COLORS.graphLineRed}
-          />
-        </div>
-      </div>
+      {/* Snapshot placement: below */}
+      {snapshotSettings.placement === 'below' && renderSnapshotSection()}
 
       {/* Bottom stats boxes - 3 columns like XP */}
+      {/* When 'databoxes' placement is selected, snapshots appear here as databox cards */}
       <div className="grid grid-cols-3 gap-3">
+        {/* Snapshot cameras as databoxes (when placement is 'databoxes') */}
+        {snapshotSettings.placement === 'databoxes' && renderSnapshotSection(true)}
+        
         {/* Totals (like Handles, Threads, Processes) */}
         <div 
           className="border p-2"
@@ -1055,8 +1257,91 @@ export default function TaskManagerClient({
           </div>
         </div>
       </div>
+
+      {/* Third row - Model Thumbnail and Lifetime Stats */}
+      <div className="grid grid-cols-3 gap-3 mt-3">
+        {/* Model Thumbnail */}
+        <div 
+          className="border p-0 overflow-hidden"
+          style={{ 
+            borderColor: '#919B9C',
+            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
+          }}
+        >
+          <div className="font-bold text-black px-2 py-1 flex items-center gap-1">
+            <Image className="w-3 h-3" />
+            <span>Model Preview</span>
+          </div>
+          <div 
+            className="relative flex items-center justify-center"
+            style={{ 
+              backgroundColor: '#000000',
+              minHeight: '80px',
+              aspectRatio: '1/1',
+              maxHeight: '120px'
+            }}
+          >
+            {modelThumbnail ? (
+              <img
+                src={modelThumbnail}
+                alt="Model preview"
+                className="w-full h-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none'
+                }}
+              />
+            ) : (
+              <div className="text-gray-500 text-[10px] text-center p-2">
+                {filename !== 'No active print' ? 'No preview' : 'No print active'}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Empty slot for balance or future use */}
+        <div 
+          className="border p-2"
+          style={{ 
+            borderColor: '#919B9C',
+            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
+          }}
+        >
+          <div className="font-bold text-black mb-1">File Info</div>
+          <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
+            <span>Name</span>
+            <span className="text-right truncate" title={filename}>{filename.length > 10 ? filename.substring(0, 10) + '...' : filename}</span>
+            <span>State</span>
+            <span className="text-right">{printState}</span>
+            <span>Speed</span>
+            <span className="text-right">{currentSpeed.toFixed(0)} mm/s</span>
+          </div>
+        </div>
+
+        {/* Lifetime Statistics */}
+        <div 
+          className="border p-2"
+          style={{ 
+            borderColor: '#919B9C',
+            boxShadow: 'inset 1px 1px 0 #808080, inset -1px -1px 0 #FFFFFF'
+          }}
+        >
+          <div className="font-bold text-black mb-1 flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            <span>Lifetime</span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-2 text-black text-[10px]">
+            <span>Print Time</span>
+            <span className="text-right">{lifetimeStats ? formatTime(lifetimeStats.totalPrintTime) : 'N/A'}</span>
+            <span>Total Jobs</span>
+            <span className="text-right">{lifetimeStats?.totalJobs || 0}</span>
+            <span>Filament</span>
+            <span className="text-right">{lifetimeStats ? formatFilament(lifetimeStats.totalFilamentUsed) : 'N/A'}</span>
+          </div>
+        </div>
+      </div>
     </div>
   )
+  }
 
   // Render Networking Tab
   const renderNetworkingTab = () => {
@@ -1259,8 +1544,8 @@ export default function TaskManagerClient({
                       />
                     </div>
                     
-                    {/* Framerate and Chroma color row */}
-                    <div className="grid grid-cols-2 gap-2">
+                    {/* Framerate, Chroma color and Size row */}
+                    <div className="grid grid-cols-3 gap-2">
                       {/* Framerate */}
                       <div>
                         <label className="block text-black text-[10px] mb-0.5">Framerate</label>
@@ -1286,6 +1571,20 @@ export default function TaskManagerClient({
                           <option value="green">Green</option>
                           <option value="blue">Blue</option>
                           <option value="custom">Custom</option>
+                        </select>
+                      </div>
+                      
+                      {/* Size */}
+                      <div>
+                        <label className="block text-black text-[10px] mb-0.5">Size</label>
+                        <select
+                          value={camera.size || 'small'}
+                          onChange={(e) => updateChromaCamera(camera.id, { size: e.target.value as VideoSize })}
+                          className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
+                        >
+                          <option value="small">Small (1x)</option>
+                          <option value="medium">Medium (2x)</option>
+                          <option value="large">Large (3x)</option>
                         </select>
                       </div>
                     </div>
@@ -1385,32 +1684,69 @@ export default function TaskManagerClient({
             {/* Dialog content */}
             <div className="p-3">
               <p className="text-[11px] text-black mb-3">
-                Select cameras to display in the snapshot section.
+                Select cameras and display options for the snapshot section.
               </p>
-              <div className="space-y-1">
-                {availableWebcams.length > 0 ? (
-                  availableWebcams.map(camera => (
-                    <label 
-                      key={camera.uid}
-                      className="flex items-center gap-2 px-2 py-1 text-[11px] text-black hover:bg-[#316AC5] hover:text-white cursor-pointer rounded"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedSnapshotCameras.includes(camera.uid)}
-                        onChange={(e) => handleCameraSelectionChange(camera.uid, e.target.checked)}
-                        className="w-3 h-3"
-                      />
-                      <Camera className="w-3 h-3" />
-                      <span className="truncate">{camera.name}</span>
-                    </label>
-                  ))
-                ) : (
-                  <div className="text-gray-500 italic text-[11px]">
-                    No cameras available
-                  </div>
-                )}
+              
+              {/* Camera selection */}
+              <div className="mb-3">
+                <div className="text-black text-[10px] font-bold mb-1">Cameras</div>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {availableWebcams.length > 0 ? (
+                    availableWebcams.map(camera => (
+                      <label 
+                        key={camera.uid}
+                        className="flex items-center gap-2 px-2 py-1 text-[11px] text-black hover:bg-[#316AC5] hover:text-white cursor-pointer rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedSnapshotCameras.includes(camera.uid)}
+                          onChange={(e) => handleCameraSelectionChange(camera.uid, e.target.checked)}
+                          className="w-3 h-3"
+                        />
+                        <Camera className="w-3 h-3" />
+                        <span className="truncate">{camera.name}</span>
+                      </label>
+                    ))
+                  ) : (
+                    <div className="text-gray-500 italic text-[11px]">
+                      No cameras available
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex justify-end gap-2 mt-3">
+              
+              {/* Size and Placement options */}
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {/* Size */}
+                <div>
+                  <label className="block text-black text-[10px] font-bold mb-0.5">Size</label>
+                  <select
+                    value={snapshotSettings.size}
+                    onChange={(e) => saveSnapshotSettings({ size: e.target.value as VideoSize })}
+                    className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
+                  >
+                    <option value="small">Small (1x)</option>
+                    <option value="medium">Medium (2x)</option>
+                    <option value="large">Large (3x)</option>
+                  </select>
+                </div>
+                
+                {/* Placement */}
+                <div>
+                  <label className="block text-black text-[10px] font-bold mb-0.5">Placement</label>
+                  <select
+                    value={snapshotSettings.placement}
+                    onChange={(e) => saveSnapshotSettings({ placement: e.target.value as SnapshotPlacement })}
+                    className="w-full px-2 py-0.5 text-xs border border-[#808080] bg-white text-black"
+                  >
+                    <option value="above">Above Charts</option>
+                    <option value="below">Below Charts</option>
+                    <option value="databoxes">In Data Boxes</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-2">
                 <button
                   className="px-3 py-0.5 text-[10px] text-black"
                   style={{
