@@ -233,3 +233,38 @@ export interface CameraSettings {
   created_at: string
   updated_at: string
 }
+
+// Thumbnail information from Moonraker
+export interface ThumbnailInfo {
+  width: number
+  height: number
+  size: number
+  relative_path: string
+}
+
+// GCode file metadata from Moonraker
+export interface GcodeMetadata {
+  filename: string
+  size: number
+  modified: number
+  uuid?: string
+  slicer?: string
+  slicer_version?: string
+  gcode_start_byte?: number
+  gcode_end_byte?: number
+  object_height?: number
+  estimated_time?: number
+  nozzle_diameter?: number
+  layer_height?: number
+  first_layer_height?: number
+  first_layer_extr_temp?: number
+  first_layer_bed_temp?: number
+  chamber_temp?: number
+  filament_name?: string
+  filament_type?: string
+  filament_total?: number // mm
+  filament_weight_total?: number // grams
+  thumbnails?: ThumbnailInfo[]
+  print_start_time?: number
+  job_id?: string
+}
