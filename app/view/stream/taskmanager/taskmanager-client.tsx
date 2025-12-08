@@ -6,7 +6,7 @@ import { usePrinterData } from '@/lib/hooks/use-printer-data'
 import { usePrintStatus } from '@/lib/contexts/websocket-context'
 import { useLocalStorageState } from '@/lib/hooks/use-local-storage'
 import { useInterval } from '@/lib/hooks/use-interval'
-import { XPTabButton, XP_COLORS, XPDialog, XPButton } from '@/components/ui/xp-components'
+import { XPTabButton, XP_COLORS, XPDialog, XPButton, getXPColors } from '@/components/ui/xp-components'
 import { KlipperTab } from '@/components/taskmanager/klipper-tab'
 import { ModelTab } from '@/components/taskmanager/model-tab'
 import { ApplicationsTab, ProcessesTab, NetworkingTab, UsersTab } from '@/components/taskmanager/tabs'
@@ -40,12 +40,18 @@ const FLOATING_VIDEO_POSITIONS_KEY = 'taskmanager_floating_video_positions'
 const FLOATING_VIDEO_SIZES_KEY = 'taskmanager_floating_video_sizes'
 const GROW_TENT_ENABLED_KEY = 'taskmanager_grow_tent_enabled'
 const GROW_TENT_API_URL_KEY = 'taskmanager_grow_tent_api_url'
+const BACKGROUND_IMAGE_KEY = 'taskmanager_background_image'
+const BACKGROUND_ROTATION_KEY = 'taskmanager_background_rotation'
+const DARK_MODE_KEY = 'taskmanager_dark_mode'
+const AUTO_REFRESH_ENABLED_KEY = 'taskmanager_auto_refresh_enabled'
+const AUTO_REFRESH_INTERVAL_KEY = 'taskmanager_auto_refresh_interval'
 
 // Type definitions
 type DataboxType = 'model-preview' | 'print-job' | 'temperatures' | 'console' | 'system' | 'uptime' | 'lifetime' | 'grow-tent'
 type VideoSize = 'responsive' | 'small' | 'medium' | 'large'
 type SnapshotPlacement = 'above' | 'below' | 'databoxes' | 'floating' | 'docked-above' | 'docked-below'
 type TabType = 'klipper' | 'model' | 'applications' | 'processes' | 'networking' | 'users'
+type BackgroundImage = 'win-01' | 'win-02'
 
 const DEFAULT_DATABOX_ORDER: DataboxType[] = ['model-preview', 'print-job', 'temperatures', 'system', 'uptime', 'lifetime', 'grow-tent']
 
@@ -230,6 +236,7 @@ export default function TaskManagerClient({
   const [showSnapshotDialog, setShowSnapshotDialog] = useState(false)
   const [showVideoDialog, setShowVideoDialog] = useState(false)
   const [showReorderDialog, setShowReorderDialog] = useState(false)
+  const [showDisplayDialog, setShowDisplayDialog] = useState(false)
   const [isShuttingDown, setIsShuttingDown] = useState(false)
   
   // Use custom localStorage hooks for persisted state
@@ -341,6 +348,28 @@ export default function TaskManagerClient({
   const [growTentApiUrl, setGrowTentApiUrl] = useLocalStorageState<string>(
     GROW_TENT_API_URL_KEY,
     'http://localhost:3000'
+  )
+  
+  // Display settings
+  const [backgroundImage, setBackgroundImage] = useLocalStorageState<BackgroundImage>(
+    BACKGROUND_IMAGE_KEY,
+    'win-01'
+  )
+  const [backgroundRotation, setBackgroundRotation] = useLocalStorageState<boolean>(
+    BACKGROUND_ROTATION_KEY,
+    false
+  )
+  const [darkMode, setDarkMode] = useLocalStorageState<boolean>(
+    DARK_MODE_KEY,
+    false
+  )
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useLocalStorageState<boolean>(
+    AUTO_REFRESH_ENABLED_KEY,
+    false
+  )
+  const [autoRefreshInterval, setAutoRefreshInterval] = useLocalStorageState<number>(
+    AUTO_REFRESH_INTERVAL_KEY,
+    5
   )
   const [growTentStatus, setGrowTentStatus] = useState<GrowTentStatus | null>(null)
   const [growTentClient] = useState(() => new GrowTentClient(growTentApiUrl))
@@ -471,6 +500,29 @@ export default function TaskManagerClient({
     10000, // Update every 10 seconds
     { immediate: true, enabled: growTentEnabled }
   )
+
+  // Background rotation (every 5 minutes if enabled)
+  useInterval(
+    useCallback(() => {
+      if (!backgroundRotation) return
+      
+      setBackgroundImage(prev => prev === "win-01" ? "win-02" : "win-01")
+    }, [backgroundRotation, setBackgroundImage]),
+    300000, // 5 minutes
+    { immediate: false, enabled: backgroundRotation }
+  )
+
+  // Auto refresh effect (hard page reload at specified interval)
+  useEffect(() => {
+    if (!autoRefreshEnabled || autoRefreshInterval < 1) return
+
+    const intervalMs = autoRefreshInterval * 60 * 1000 // Convert minutes to milliseconds
+    const timerId = setInterval(() => {
+      window.location.reload()
+    }, intervalMs)
+
+    return () => clearInterval(timerId)
+  }, [autoRefreshEnabled, autoRefreshInterval])
 
   // Fetch available webcams on mount
   useEffect(() => {
@@ -807,17 +859,128 @@ export default function TaskManagerClient({
   }, [setFloatingVideoSizes])
 
   const connectionStatus = isConnected ? 'Connected' : 'Reconnecting...'
+  
+  // Get colors based on dark mode
+  const colors = getXPColors(darkMode)
 
   return (
     <div 
       className="min-h-screen w-full flex items-center justify-center p-2 md:p-4"
       style={{
-        backgroundImage: 'url(/background/win-01.jpg)',
+        backgroundImage: `url(/background/${backgroundImage}.jpg)`,
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         fontFamily: 'Tahoma, "MS Sans Serif", Arial, sans-serif',
       }}
     >
+      {/* Display Settings Dialog */}
+      <XPDialog
+        title="Display Settings"
+        isOpen={showDisplayDialog}
+        onClose={() => setShowDisplayDialog(false)}
+        width="w-96"
+      >
+        <p className="text-black text-[11px] mb-3" style={{ color: colors.labelText }}>
+          Customize the appearance of the application.
+        </p>
+        
+        {/* Background Image Selection */}
+        <div className="mb-3">
+          <label className="block text-[11px] mb-1" style={{ color: colors.labelText }}>Background Image</label>
+          <select
+            value={backgroundImage}
+            onChange={(e) => setBackgroundImage(e.target.value as BackgroundImage)}
+            className="w-full px-2 py-1 text-xs border"
+            style={{ 
+              borderColor: colors.border,
+              backgroundColor: colors.contentBg,
+              color: colors.labelText
+            }}
+          >
+            <option value="win-01">Windows XP Default</option>
+            <option value="win-02">Windows XP Bliss</option>
+          </select>
+        </div>
+        
+        {/* Background Rotation Toggle */}
+        <div className="mb-3 flex items-center justify-between">
+          <label className="text-[11px]" style={{ color: colors.labelText }}>Rotate Background (5 min)</label>
+          <button
+            onClick={() => setBackgroundRotation(!backgroundRotation)}
+            className="px-3 py-1 text-xs border"
+            style={{ 
+              borderColor: colors.border,
+              backgroundColor: colors.windowBg,
+              color: colors.labelText
+            }}
+          >
+            {backgroundRotation ? '✓ Enabled' : 'Disabled'}
+          </button>
+        </div>
+        
+        {/* Dark Mode Toggle */}
+        <div className="mb-3 flex items-center justify-between">
+          <label className="text-[11px]" style={{ color: colors.labelText }}>Dark Mode</label>
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            className="px-3 py-1 text-xs border"
+            style={{ 
+              borderColor: colors.border,
+              backgroundColor: colors.windowBg,
+              color: colors.labelText
+            }}
+          >
+            {darkMode ? '✓ Enabled' : 'Disabled'}
+          </button>
+        </div>
+        
+        {/* Auto Refresh Toggle */}
+        <div className="mb-3 flex items-center justify-between">
+          <label className="text-[11px]" style={{ color: colors.labelText }}>Auto Refresh</label>
+          <button
+            onClick={() => setAutoRefreshEnabled(!autoRefreshEnabled)}
+            className="px-3 py-1 text-xs border"
+            style={{ 
+              borderColor: colors.border,
+              backgroundColor: colors.windowBg,
+              color: colors.labelText
+            }}
+          >
+            {autoRefreshEnabled ? '✓ Enabled' : 'Disabled'}
+          </button>
+        </div>
+        
+        {/* Auto Refresh Interval Slider */}
+        {autoRefreshEnabled && (
+          <div className="mb-3">
+            <label className="block text-[11px] mb-1" style={{ color: colors.labelText }}>
+              Refresh Interval: {autoRefreshInterval} minute{autoRefreshInterval !== 1 ? 's' : ''}
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="60"
+              value={autoRefreshInterval}
+              onChange={(e) => setAutoRefreshInterval(Number(e.target.value))}
+              className="w-full"
+              style={{
+                accentColor: colors.accentBlue
+              }}
+            />
+            <div className="flex justify-between text-[10px] mt-1" style={{ color: colors.labelText }}>
+              <span>1 min</span>
+              <span>60 min</span>
+            </div>
+          </div>
+        )}
+        
+        <div className="flex justify-end gap-2 mt-3">
+          <XPButton onClick={() => setShowDisplayDialog(false)}>
+            Close
+          </XPButton>
+        </div>
+      </XPDialog>
+
       {/* Chroma Camera Configuration Dialog */}
       <XPDialog
         title="Chroma Cameras"
@@ -1256,7 +1419,9 @@ export default function TaskManagerClient({
         <div 
           className="flex items-center justify-between px-2 py-1 select-none"
           style={{
-            background: 'linear-gradient(180deg, #0A6AF3 0%, #0054E3 10%, #0047CC 50%, #003EB8 90%, #002B8C 100%)',
+            background: darkMode 
+              ? 'linear-gradient(180deg, #002550 0%, #001E4D 10%, #001740 50%, #001333 90%, #000D26 100%)'
+              : 'linear-gradient(180deg, #0A6AF3 0%, #0054E3 10%, #0047CC 50%, #003EB8 90%, #002B8C 100%)',
             borderTopLeftRadius: '7px',
             borderTopRightRadius: '7px',
             height: '26px',
@@ -1281,7 +1446,9 @@ export default function TaskManagerClient({
             <button 
               className="w-5 h-5 rounded-sm flex items-end justify-center pb-0.5 text-white"
               style={{
-                background: 'linear-gradient(180deg, #3C8CF3 0%, #2570D4 50%, #1C5BB8 100%)',
+                background: darkMode
+                  ? 'linear-gradient(180deg, #1C4A8C 0%, #154079 50%, #0F3666 100%)'
+                  : 'linear-gradient(180deg, #3C8CF3 0%, #2570D4 50%, #1C5BB8 100%)',
                 border: '1px solid rgba(255,255,255,0.5)',
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.2)',
               }}
@@ -1291,7 +1458,9 @@ export default function TaskManagerClient({
             <button 
               className="w-5 h-5 rounded-sm flex items-center justify-center text-white"
               style={{
-                background: 'linear-gradient(180deg, #3C8CF3 0%, #2570D4 50%, #1C5BB8 100%)',
+                background: darkMode
+                  ? 'linear-gradient(180deg, #1C4A8C 0%, #154079 50%, #0F3666 100%)'
+                  : 'linear-gradient(180deg, #3C8CF3 0%, #2570D4 50%, #1C5BB8 100%)',
                 border: '1px solid rgba(255,255,255,0.5)',
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.2)',
               }}
@@ -1301,7 +1470,9 @@ export default function TaskManagerClient({
             <button 
               className="w-5 h-5 rounded-sm flex items-center justify-center text-white"
               style={{
-                background: 'linear-gradient(180deg, #E87A6E 0%, #D85C4B 50%, #C44333 100%)',
+                background: darkMode
+                  ? 'linear-gradient(180deg, #B85C4E 0%, #A8483A 50%, #983428 100%)'
+                  : 'linear-gradient(180deg, #E87A6E 0%, #D85C4B 50%, #C44333 100%)',
                 border: '1px solid rgba(255,255,255,0.5)',
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.2)',
               }}
@@ -1314,11 +1485,12 @@ export default function TaskManagerClient({
         {/* Menu Bar */}
         <div 
           className="flex items-center px-2 py-0.5 text-xs border-b relative"
-          style={{ backgroundColor: XP_COLORS.windowBg, borderColor: '#ACA899' }}
+          style={{ backgroundColor: colors.windowBg, borderColor: colors.border }}
         >
           <div className="relative">
             <span 
-              className={`px-2 py-0.5 cursor-default text-black flex items-center gap-0.5 ${showFileMenu ? 'bg-[#316AC5] text-white' : 'hover:bg-[#316AC5] hover:text-white'}`}
+              className={`px-2 py-0.5 cursor-default flex items-center gap-0.5 ${showFileMenu ? 'bg-[#316AC5] text-white' : 'hover:bg-[#316AC5] hover:text-white'}`}
+              style={{ color: showFileMenu ? '#FFFFFF' : colors.labelText }}
               onClick={() => { setShowOptionsMenu(false); setShowViewMenu(false); setShowFileMenu(!showFileMenu) }}
             >
               File <ChevronDown className="w-3 h-3" />
@@ -1330,7 +1502,8 @@ export default function TaskManagerClient({
                 onMouseLeave={handleCloseMenus}
               >
                 <div 
-                  className={`px-4 py-1 flex items-center gap-2 ${hasActivePrint ? 'text-black hover:bg-[#316AC5] hover:text-white cursor-pointer' : 'text-gray-400 cursor-default'}`}
+                  className={`px-4 py-1 flex items-center gap-2 ${hasActivePrint ? 'hover:bg-[#316AC5] hover:text-white cursor-pointer' : 'cursor-default'}`}
+                  style={{ color: hasActivePrint ? colors.labelText : colors.border }}
                   onClick={hasActivePrint ? handleDownloadGcode : undefined}
                 >
                   <Download className="w-3 h-3" />
@@ -1342,7 +1515,8 @@ export default function TaskManagerClient({
           
           <div className="relative">
             <span 
-              className={`px-2 py-0.5 cursor-default text-black flex items-center gap-0.5 ${showOptionsMenu ? 'bg-[#316AC5] text-white' : 'hover:bg-[#316AC5] hover:text-white'}`}
+              className={`px-2 py-0.5 cursor-default flex items-center gap-0.5 ${showOptionsMenu ? 'bg-[#316AC5] text-white' : 'hover:bg-[#316AC5] hover:text-white'}`}
+              style={{ color: showOptionsMenu ? '#FFFFFF' : colors.labelText }}
               onClick={() => { setShowFileMenu(false); setShowViewMenu(false); setShowOptionsMenu(!showOptionsMenu) }}
             >
               Options <ChevronDown className="w-3 h-3" />
@@ -1350,34 +1524,44 @@ export default function TaskManagerClient({
             {showOptionsMenu && (
               <div 
                 className="absolute top-full left-0 z-50 py-1 min-w-[200px] shadow-md"
-                style={{ backgroundColor: '#FFFFFF', border: '1px solid #808080' }}
+                style={{ backgroundColor: colors.contentBg, border: `1px solid ${colors.border}` }}
                 onMouseLeave={handleCloseMenus}
               >
-                <div className="px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                <div className="px-4 py-1 hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                  style={{ color: colors.labelText }}
                   onClick={() => { openChromaDialog(); setShowOptionsMenu(false) }}>
                   Chroma...
                 </div>
-                <div className="px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                <div className="px-4 py-1 hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                  style={{ color: colors.labelText }}
                   onClick={() => { setShowSnapshotDialog(true); setShowOptionsMenu(false) }}>
                   Snapshots...
                 </div>
-                <div className="px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                <div className="px-4 py-1 hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                  style={{ color: colors.labelText }}
                   onClick={() => { setShowVideoDialog(true); setShowOptionsMenu(false) }}>
                   Video...
                 </div>
-                <div className="border-t border-[#808080] my-1" />
+                <div className="border-t my-1" style={{ borderColor: colors.border }} />
+                <div className="px-4 py-1 hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                  style={{ color: colors.labelText }}
+                  onClick={() => { setShowDisplayDialog(true); setShowOptionsMenu(false) }}>
+                  Display...
+                </div>
+                <div className="border-t my-1" style={{ borderColor: colors.border }} />
                 <div 
                   className={`px-4 py-1 flex items-center justify-between cursor-pointer ${
-                    growTentEnabled ? 'text-black hover:bg-[#316AC5] hover:text-white' : 'text-black hover:bg-[#316AC5] hover:text-white'
+                    growTentEnabled ? 'hover:bg-[#316AC5] hover:text-white' : 'hover:bg-[#316AC5] hover:text-white'
                   }`}
+                  style={{ color: colors.labelText }}
                   onClick={() => setGrowTentEnabled(!growTentEnabled)}
                 >
                   <span>Show Grow Tent</span>
                   <span className="text-xs">{growTentEnabled ? '✓' : ''}</span>
                 </div>
-                <div className="border-t border-[#808080] my-1" />
-                <div className="px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer"
-                  onClick={() => { setShowReorderDialog(true); setShowOptionsMenu(false) }}>
+                <div className="border-t my-1" style={{ borderColor: colors.border }} />
+                <div className="px-4 py-1 hover:bg-[#316AC5] hover:text-white cursor-pointer"
+                  style={{ color: colors.labelText }} onClick={() => { setShowReorderDialog(true); setShowOptionsMenu(false) }}>
                   Reorder Databoxes...
                 </div>
               </div>
@@ -1386,7 +1570,8 @@ export default function TaskManagerClient({
           
           <div className="relative">
             <span 
-              className={`px-2 py-0.5 cursor-default text-black flex items-center gap-0.5 ${showViewMenu ? 'bg-[#316AC5] text-white' : 'hover:bg-[#316AC5] hover:text-white'}`}
+              className={`px-2 py-0.5 cursor-default flex items-center gap-0.5 ${showViewMenu ? 'bg-[#316AC5] text-white' : 'hover:bg-[#316AC5] hover:text-white'}`}
+              style={{ color: showViewMenu ? '#FFFFFF' : colors.labelText }}
               onClick={() => { setShowFileMenu(false); setShowOptionsMenu(false); setShowViewMenu(!showViewMenu) }}
             >
               View <ChevronDown className="w-3 h-3" />
@@ -1394,17 +1579,17 @@ export default function TaskManagerClient({
             {showViewMenu && (
               <div 
                 className="absolute top-full left-0 z-50 py-1 min-w-[180px] shadow-md"
-                style={{ backgroundColor: '#FFFFFF', border: '1px solid #808080' }}
+                style={{ backgroundColor: colors.contentBg, border: `1px solid ${colors.border}` }}
                 onMouseLeave={handleCloseMenus}
               >
-                <a href="/view/stream/horizontal" className="block px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer">
+                <a href="/view/stream/horizontal" className="block px-4 py-1 hover:bg-[#316AC5] hover:text-white cursor-pointer" style={{ color: colors.labelText }}>
                   Horizontal Stream View
                 </a>
-                <a href="/view/stream/vertical" className="block px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer">
+                <a href="/view/stream/vertical" className="block px-4 py-1 hover:bg-[#316AC5] hover:text-white cursor-pointer" style={{ color: colors.labelText }}>
                   Vertical Stream View
                 </a>
-                <div className="border-t border-[#808080] my-1" />
-                <a href="/" className="block px-4 py-1 text-black hover:bg-[#316AC5] hover:text-white cursor-pointer">
+                <div className="border-t my-1" style={{ borderColor: colors.border }} />
+                <a href="/" className="block px-4 py-1 hover:bg-[#316AC5] hover:text-white cursor-pointer" style={{ color: colors.labelText }}>
                   Dashboard Home
                 </a>
               </div>
@@ -1412,7 +1597,8 @@ export default function TaskManagerClient({
           </div>
           
           <span 
-            className={`px-2 py-0.5 cursor-default ${isDevelopment ? 'text-black hover:bg-[#316AC5] hover:text-white' : 'text-gray-400'}`}
+            className={`px-2 py-0.5 cursor-default ${isDevelopment ? 'hover:bg-[#316AC5] hover:text-white' : ''}`}
+            style={{ color: isDevelopment ? colors.labelText : colors.border }}
             onClick={() => isDevelopment && setShowShutdownDialog(true)}
             title={isDevelopment ? 'Shut down the printer host' : 'Shutdown disabled in production'}
           >
@@ -1421,9 +1607,9 @@ export default function TaskManagerClient({
         </div>
 
         {/* Main content area */}
-        <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: XP_COLORS.windowBg }}>
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ backgroundColor: colors.windowBg }}>
           {/* Tab bar */}
-          <div className="flex px-2 pt-1" style={{ backgroundColor: XP_COLORS.windowBg }}>
+          <div className="flex px-2 pt-1" style={{ backgroundColor: colors.windowBg }}>
             <XPTabButton active={activeTab === 'klipper'} onClick={() => setActiveTab('klipper')}>
               Klipper
             </XPTabButton>
@@ -1452,8 +1638,8 @@ export default function TaskManagerClient({
           <div 
             className="flex-1 mx-2 mb-2 overflow-hidden flex flex-col"
             style={{
-              backgroundColor: '#FFFFFF',
-              border: '1px solid #919B9C',
+              backgroundColor: colors.contentBg,
+              border: `1px solid ${colors.tabBorder}`,
               borderTop: 'none',
               borderRadius: '0 0 2px 2px',
               minHeight: 0,
@@ -1534,19 +1720,20 @@ export default function TaskManagerClient({
         <div 
           className="flex items-center h-6 text-xs border-t"
           style={{ 
-            backgroundColor: XP_COLORS.windowBg,
-            borderColor: '#ACA899',
+            backgroundColor: colors.statusBg,
+            borderColor: colors.border,
             borderBottomLeftRadius: '3px',
             borderBottomRightRadius: '3px',
           }}
         >
           <div 
-            className="flex-1 px-2 flex items-center gap-1.5 text-black"
+            className="flex-1 px-2 flex items-center gap-1.5"
             style={{
-              borderRight: '1px solid #808080',
-              borderTop: '1px solid #808080',
-              borderLeft: '1px solid #FFFFFF',
-              borderBottom: '1px solid #FFFFFF',
+              color: colors.labelText,
+              borderRight: `1px solid ${colors.border}`,
+              borderTop: `1px solid ${colors.border}`,
+              borderLeft: `1px solid ${colors.borderLight}`,
+              borderBottom: `1px solid ${colors.borderLight}`,
               margin: '2px',
               padding: '0 8px',
             }}
@@ -1558,12 +1745,13 @@ export default function TaskManagerClient({
             {connectionStatus}
           </div>
           <div 
-            className="px-2 flex items-center gap-2 text-black text-[10px]"
+            className="px-2 flex items-center gap-2 text-[10px]"
             style={{
-              borderRight: '1px solid #808080',
-              borderTop: '1px solid #808080',
-              borderLeft: '1px solid #FFFFFF',
-              borderBottom: '1px solid #FFFFFF',
+              color: colors.labelText,
+              borderRight: `1px solid ${colors.border}`,
+              borderTop: `1px solid ${colors.border}`,
+              borderLeft: `1px solid ${colors.borderLight}`,
+              borderBottom: `1px solid ${colors.borderLight}`,
               margin: '2px',
               padding: '0 8px',
               minWidth: '180px',

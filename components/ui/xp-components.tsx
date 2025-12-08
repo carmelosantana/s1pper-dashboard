@@ -38,6 +38,45 @@ export const XP_COLORS = {
   maxBtn: '#3C6EAF',
 } as const
 
+// Dark mode color palette - Windows XP inspired
+export const XP_COLORS_DARK = {
+  // Window chrome - darker blues
+  titleBarStart: '#001E4D',
+  titleBarEnd: '#001E4D',
+  titleBarActive: 'linear-gradient(180deg, #002B6B 0%, #001E4D 50%, #001740 100%)',
+  windowBg: '#2D2D30',
+  // Tab and content
+  tabBg: '#2D2D30',
+  tabActiveBg: '#1E1E1E',
+  tabBorder: '#3F3F46',
+  contentBg: '#1E1E1E',
+  // Graphs - keep authentic XP green
+  graphBg: '#000000',
+  graphGrid: '#003200',
+  graphLine: '#00FF00',
+  graphLineAlt: '#FFFF00',
+  graphLineRed: '#FF0000',
+  // Text
+  labelText: '#E0E0E0',
+  valueText: '#E0E0E0',
+  // Headers and borders
+  headerBg: '#3F3F46',
+  headerText: '#E0E0E0',
+  border: '#555555',
+  borderLight: '#666666',
+  borderDark: '#2A2A2A',
+  // Status bar
+  statusBg: '#2D2D30',
+  // Window buttons
+  closeBtn: '#C44333',
+  closeBtnHover: '#E04343',
+  minBtn: '#1C5BB8',
+  maxBtn: '#1C5BB8',
+} as const
+
+// Helper function to get colors based on dark mode
+export const getXPColors = (isDark: boolean) => isDark ? XP_COLORS_DARK : XP_COLORS
+
 // Common styles that can be reused
 export const XP_STYLES = {
   databoxBorder: {
